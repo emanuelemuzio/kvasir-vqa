@@ -1,3 +1,4 @@
-cython
-python-opencv
-easydict
+torch
+absl-py
+wrapt
+python-flatbuffers
