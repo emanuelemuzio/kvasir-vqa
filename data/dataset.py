@@ -19,7 +19,7 @@ def load_json(path):
     data = json.load(f)
     return data
 
-class CocoVQA(data.Dataset):
+class VQADataset(data.Dataset):
     def __init__(self, image_ids, questions, question_ids, answers, answer_confidence, answer_ids, answer_types, multiple_choice_answers, question_types):
         self.image_ids = image_ids
         self.questions = questions
@@ -32,16 +32,19 @@ class CocoVQA(data.Dataset):
         self.question_types = question_types
 
     def __len__(self):
-        return len(self.inputs)
+        return len(self.image_ids)
 
     def __getitem__(self, idx):
-        inputs = tokenizer(self.inputs.iloc[idx], add_special_tokens=True,
-                            return_tensors='pt', padding='max_length',
-                            max_length = self.MAX_LEN, truncation=True)
-        labels = self.labels[idx]
         return {
-            'image_id': self.image_ids.ilox[idx],
-            #...
+            "image_id" : self.image_ids.iloc[idx],
+            "question" : self.questions.iloc[idx],
+            "question_id" : self.question_ids.iloc[idx],
+            "answer" : self.answers.iloc[idx],
+            "answer_confidence" : self.answer_confidence.iloc[idx],
+            "answer_id" : self.answer_ids.iloc[idx],
+            "answer_type" : self.answer_types.iloc[idx],
+            "multiple_choice_answer" : self.multiple_choice_answers.iloc[idx],
+            "question_type" : self.question_types.iloc[idx]
         }
 
     def __len__(self):
@@ -94,7 +97,20 @@ def build_dataframe():
 
 def build():
     dataframe = build_dataframe()
-    dataset = None
+    dataset = VQADataset(
+        dataframe['image_id'].tolist(),
+        dataframe['question'].tolist(),
+        dataframe['question_id'].tolist(),
+        dataframe['answer'].tolist(),
+        dataframe['answer_confidence'].tolist(),
+        dataframe['answer_id'].tolist(),
+        dataframe['answer_type'].tolist(),
+        dataframe['multiple_choice_answer'].tolist(),
+        dataframe['question_type'].tolist()
+    )
+
+    return dataset
     
-build()
-    
+dataset = build()
+
+print(1)
