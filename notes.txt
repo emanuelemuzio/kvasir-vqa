@@ -1,0 +1,13 @@
+dataset: https://visualqa.org/download.html
+
+Model: https://huggingface.co/Salesforce/blip-vqa-base
+Paper: https://arxiv.org/pdf/2201.12086v2
+
+Model: https://huggingface.co/google/deplot
+Paper: https://arxiv.org/pdf/2212.10505
+
+Model: https://huggingface.co/microsoft/git-base-textvqa
+Paper: https://arxiv.org/pdf/2205.14100
+
+Model: https://huggingface.co/dandelin/vilt-b32-finetuned-vqa
+Paper: https://arxiv.org/pdf/2102.03334

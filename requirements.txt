@@ -2,3 +2,4 @@ torch
 absl-py
 wrapt
 python-flatbuffers
+conda install pycocotools -c conda-forge

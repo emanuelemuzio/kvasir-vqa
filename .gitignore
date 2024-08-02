@@ -1,3 +1,6 @@
+v2*.json
+data/val2014/*.jpg
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
