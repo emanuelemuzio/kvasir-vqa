@@ -45,10 +45,7 @@ class VQADataset(data.Dataset):
             "answer_type" : self.answer_types.iloc[idx],
             "multiple_choice_answer" : self.multiple_choice_answers.iloc[idx],
             "question_type" : self.question_types.iloc[idx]
-        }
-
-    def __len__(self):
-        return len(self.ids)
+        } 
 
 def build_dataframe():
 
@@ -95,22 +92,18 @@ def build_dataframe():
 
     return dataframe
 
-def build():
+def build_dataset():
     dataframe = build_dataframe()
     dataset = VQADataset(
-        dataframe['image_id'].tolist(),
-        dataframe['question'].tolist(),
-        dataframe['question_id'].tolist(),
-        dataframe['answer'].tolist(),
-        dataframe['answer_confidence'].tolist(),
-        dataframe['answer_id'].tolist(),
-        dataframe['answer_type'].tolist(),
-        dataframe['multiple_choice_answer'].tolist(),
-        dataframe['question_type'].tolist()
+        dataframe['image_id'],
+        dataframe['question'],
+        dataframe['question_id'],
+        dataframe['answer'],
+        dataframe['answer_confidence'],
+        dataframe['answer_id'],
+        dataframe['answer_type'],
+        dataframe['multiple_choice_answer'],
+        dataframe['question_type']
     )
 
     return dataset
-    
-dataset = build()
-
-print(1)
