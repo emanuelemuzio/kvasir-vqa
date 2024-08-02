@@ -48,19 +48,6 @@ class CocoVQA(data.Dataset):
         return len(self.ids)
 
 def build_dataframe():
-    dtypes = np.dtype(
-        [
-            ("image_id", int), 
-            ("question", str), 
-            ("question_id", int), 
-            ("answer", str), 
-            ("answer_confidence", str),
-            ("answer_id", int),
-            ("answer_type", str),
-            ("multiple_choice_answer", str),
-            ("question_type", str)
-        ]
-    )  
 
     header = [
         "image_id",
@@ -82,31 +69,32 @@ def build_dataframe():
 
     assert(len(annotations) == len(questions)) 
 
-    data = np.empty((len(questions), len(header)))
+    data = []
+    dataframe = pd.DataFrame(data, columns=header)
 
-    for (annotation, question) in zip (annotations[0:5], questions[0:5]):
+
+    for (annotation, question) in zip (annotations, questions):
         for answer in annotation['answers']:
-            np.append(data,
-                [
-                    question['image_id'],
-                    question['question'],
-                    question['question_id'],
-                    answer['answer'],
-                    answer['answer_confidence'],
-                    answer['answer_id'],
-                    annotation['answer_type'],
-                    annotation['multiple_choice_answer'],
-                    annotation['question_type']
-                ]
-            )
+            data.append([
+                question['image_id'],
+                question['question'],
+                question['question_id'],
+                answer['answer'],
+                answer['answer_confidence'],
+                answer['answer_id'],
+                annotation['answer_type'],
+                annotation['multiple_choice_answer'],
+                annotation['question_type']
+            ])
+            
     
-    dataframe = pd.DataFrame(data, columns=header, dtype=dtypes)
+    dataframe = pd.DataFrame(data, columns=header)
 
     return dataframe
 
 def build():
     dataframe = build_dataframe()
-    dataset = CocoVQA()
+    dataset = None
     
 build()
     
