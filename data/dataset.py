@@ -1,6 +1,6 @@
-import json
 import torch.utils.data as data
 import pandas as pd
+from utils import load_json
 
 """"
 
@@ -8,17 +8,6 @@ The dataset used for the thesis was VQA 2.0, which consists of both images and J
 files containing information about the question, the image and the answers provided by users
 
 """
-
-""""
-
-Simple function for loading the json files, which contains data about the annotated answers and questions
-
-"""
-
-def load_json(path: str):
-    f = open(path)
-    data = json.load(f)
-    return data
 
 """
 

@@ -1,13 +1,13 @@
 from transformers import BlipForQuestionAnswering, BlipProcessor, ViltProcessor, ViltForQuestionAnswering, AutoProcessor, AutoModelForCausalLM
 from PIL import Image
-import requests
 import torch
 import data.dataset as dataset_gen
-from data.dataset import load_json, ANNOTATIONS_PATH
+from data.dataset import load_json
 import utils
 import os
 import csv
 import argparse
+from utils import load_json
 
 gpu_available = torch.cuda.is_available()
 IDENTIFIER_LEN = 12 
@@ -32,16 +32,16 @@ https://huggingface.co/Salesforce/blip-vqa-base
 
 """
 
-def blip_vqa_test(dataset) -> float:
+def blip_vqa_test(dataset, annotations_path: str, imgs_path: str) -> float:
     model_name = "Salesforce/blip-vqa-base"
     model = utils.get_model(BlipForQuestionAnswering, model_name)
     processor = utils.get_model(BlipProcessor, model_name)
-    annotations = load_json(ANNOTATIONS_PATH)['annotations']
+    annotations = load_json(annotations_path)['annotations']
     accuracy = 0
 
     for idx in range(len(dataset)):
         identifier = ('0' * (IDENTIFIER_LEN - len(str(dataset[idx]['image_id'])))) + str(dataset[idx]['image_id'])
-        img = Image.open(IMGS_PATH.replace("[IDENTIFIER]", identifier))
+        img = Image.open(imgs_path.replace("[IDENTIFIER]", identifier))
         question = dataset[idx]['question']
         inputs = None
         answers = annotations[idx]['answers']
@@ -67,16 +67,16 @@ https://huggingface.co/dandelin/vilt-b32-finetuned-vqa
 
 """
 
-def vilt_vqa_test(dataset) -> float:
+def vilt_vqa_test(dataset, annotations_path: str, imgs_path: str) -> float:
     model_name = "dandelin/vilt-b32-finetuned-vqa"
     model = utils.get_model(ViltForQuestionAnswering, model_name)
     processor = utils.get_model(ViltProcessor, model_name)
-    annotations = load_json(ANNOTATIONS_PATH)['annotations']
+    annotations = load_json(annotations_path)['annotations']
     accuracy = 0
 
     for idx in range(len(dataset)):
         identifier = ('0' * (IDENTIFIER_LEN - len(str(dataset[idx]['image_id'])))) + str(dataset[idx]['image_id'])
-        img = Image.open(IMGS_PATH.replace("[IDENTIFIER]", identifier))
+        img = Image.open(imgs_path.replace("[IDENTIFIER]", identifier))
         question = dataset[idx]['question']
         inputs = None
         answers = annotations[idx]['answers']
@@ -105,16 +105,16 @@ https://huggingface.co/microsoft/git-base-vqav2
 
 """
 
-def git_base_vqa_test(dataset) -> float:
+def git_base_vqa_test(dataset, annotations_path: str, imgs_path: str) -> float:
     model_name = "microsoft/git-base-vqav2"
     model = utils.get_model(AutoModelForCausalLM, model_name)
     processor = utils.get_model(AutoProcessor, model_name)
-    annotations = load_json(ANNOTATIONS_PATH)['annotations']
+    annotations = load_json(annotations_path)['annotations']
     accuracy = 0
 
     for idx in range(len(dataset)):
         identifier = ('0' * (IDENTIFIER_LEN - len(str(dataset[idx]['image_id'])))) + str(dataset[idx]['image_id'])
-        img = Image.open(IMGS_PATH.replace("[IDENTIFIER]", identifier)).convert("RGB")
+        img = Image.open(imgs_path.replace("[IDENTIFIER]", identifier)).convert("RGB")
         question = dataset[idx]['question']
         answers = annotations[idx]['answers']
         pixel_values = processor(images=img, return_tensors="pt").pixel_values
@@ -143,59 +143,47 @@ def git_base_vqa_test(dataset) -> float:
 
 """
 
-Generate the file tests.csv, containing the accuracy of all the models being tested
+Generate the file .csv, containing the accuracy of all the models being tested
 The models are hardcoded and since each one slightly differs from the others, has a dedicated function
 for inference.
-TODO: Differentiate the test for abstract and real scenes, ATM only real scenes are considered
 
 """
-MODELS = [
-    
-    ''
-    ''
-]
-def test_models():
-    if not os.path.exists('blip-vqa-base_tests.csv'):
-        dataset = dataset_gen.build_dataset()
-        blip_vqa_accuracy = blip_vqa_test(dataset)
-        with open('blip-vqa-base_tests.csv', 'w', newline='') as file:
-            writer = csv.writer(file)
-            field = ["model", "accuracy","scene"]
-            writer.writerow(field)
-            writer.writerow(["Salesforce/blip-vqa-base", blip_vqa_accuracy, "COCO"])
-    
-    if not os.path.exists('vilt-b32-finetuned-vqa_tests.csv'):
-        dataset = dataset_gen.build_dataset()
-        vilt_vqa_accuracy = vilt_vqa_test(dataset)
-        with open('vilt-b32-finetuned-vqa_tests.csv', 'w', newline='') as file:
-            writer = csv.writer(file)
-            field = ["model", "accuracy","scene"]
-            writer.writerow(field)
-            writer.writerow(["dandelin/vilt-b32-finetuned-vqa", vilt_vqa_accuracy, "COCO"])
 
-    if not os.path.exists('git-base-vqav2_tests.csv'):
-        dataset = dataset_gen.build_dataset()
-        git_base_vqa_accuracy = git_base_vqa_test(dataset)
-        with open("git-base-vqav2_tests.csv", 'w', newline='') as file:
+def test_models(source: list):
+    annotations_path = None
+    imgs_path = None
+
+    data_mapping = utils.map_data(source)
+    csv_name = ('_'.join(source)) + '_test.csv'
+
+    annotations_path = data_mapping['annotations']['test']
+    imgs_path = data_mapping['images']['test']
+
+    if not os.path.exists(csv_name):
+        with open(csv_name, 'w', newline='') as file:
             writer = csv.writer(file)
-            field = ["model", "accuracy","scene"]
+            dataset = dataset_gen.build_dataset()
+
+            blip_vqa_accuracy = blip_vqa_test(dataset, annotations_path, imgs_path)
+            git_base_vqa_accuracy = git_base_vqa_test(dataset)
+            vilt_vqa_accuracy = vilt_vqa_test(dataset)
+
+            field = ["model", "accuracy"]
+            writer.writerow(field)
+            writer.writerow(["Salesforce/blip-vqa-base", blip_vqa_accuracy])
+            writer.writerow(["dandelin/vilt-b32-finetuned-vqa", vilt_vqa_accuracy])
+            writer.writerow(["microsoft/git-base-vqav2", git_base_vqa_accuracy]) 
             
-            writer.writerow(field)
-            writer.writerow(["microsoft/git-base-vqav2", git_base_vqa_accuracy, "COCO"])
 
-def main():
-    parser = argparse.ArgumentParser(description ='Process some integers.')
-    parser.add_argument('integers', metavar ='N', 
-                    type = int, nargs ='+',
-                    help ='an integer for the accumulator')
- 
-    parser.add_argument(dest ='accumulate', 
-                        action ='store_const',
-                        const = sum, 
-                        help ='sum the integers')
-    
-    args = parser.parse_args()
-    test_models()
+def main(source: list):
+    test_models(source)
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser(description ='Test the models on available data from VQA2')
+    parser.add_argument('--source', 
+                    type = utils.list_of_strings, 
+                    help ="Use 'real', 'abstract' or 'abstract,real'/'real,abstract'")
+    
+    args = parser.parse_args()
+    source = args.source
+    main(source)
