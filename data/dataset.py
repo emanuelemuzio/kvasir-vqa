@@ -1,35 +1,58 @@
 import json
 import torch.utils.data as data
-from PIL import Image
-import os
-import os.path
-import numpy as np
 import pandas as pd
+
+""""
+
+The dataset used for the thesis was VQA 2.0, which consists of both images and JSON
+files containing information about the question, the image and the answers provided by users
+
+"""
 
 ANNOTATIONS_PATH = 'data/v2_mscoco_val2014_annotations.json'
 COMPLEMENTARY_PAIRS_PATH = 'data/v2_mscoco_val2014_complementary_pairs.json'
 QUESTIONS_PATH = 'data/v2_OpenEnded_mscoco_val2014_questions.json'
-COCO_PATH = 'data/val2014'
+COCO_PATH = 'data/val2014' 
 
-def extract_ids(x):
-    return x['image_id']
+""""
 
-def load_json(path):
+Simple function for loading the json files, which contains data about the annotated answers and questions
+
+"""
+
+def load_json(path: str):
     f = open(path)
     data = json.load(f)
     return data
 
+"""
+
+Torch Dataset used for loading informations about the pairs of images and questions 
+
+"""
+
 class VQADataset(data.Dataset):
-    def __init__(self, image_ids, questions, question_ids, answers, answer_confidence, answer_ids, answer_types, multiple_choice_answers, question_types):
+    def __init__(
+            self, 
+            image_ids, 
+            questions, 
+            question_ids, 
+            # answers, 
+            # answer_confidence, 
+            # answer_ids, 
+            # answer_types,
+            # multiple_choice_answers, 
+            # question_types
+            ):
         self.image_ids = image_ids
         self.questions = questions
         self.question_ids = question_ids
-        self.answers = answers
-        self.answer_confidence = answer_confidence
-        self.answer_ids = answer_ids
-        self.answer_types = answer_types
-        self.multiple_choice_answers = multiple_choice_answers
-        self.question_types = question_types
+        # self.answers = answers
+        # self.answer_confidence = answer_confidence
+        # self.answer_ids = answer_ids
+        # self.answer_types = answer_types
+        # self.multiple_choice_answers = multiple_choice_answers
+        # self.question_types = question_types
 
     def __len__(self):
         return len(self.image_ids)
@@ -38,16 +61,27 @@ class VQADataset(data.Dataset):
         return {
             "image_id" : self.image_ids.iloc[idx],
             "question" : self.questions.iloc[idx],
-            "question_id" : self.question_ids.iloc[idx],
-            "answer" : self.answers.iloc[idx],
-            "answer_confidence" : self.answer_confidence.iloc[idx],
-            "answer_id" : self.answer_ids.iloc[idx],
-            "answer_type" : self.answer_types.iloc[idx],
-            "multiple_choice_answer" : self.multiple_choice_answers.iloc[idx],
-            "question_type" : self.question_types.iloc[idx]
+            "question_id" : self.question_ids.iloc[idx]
+            # "answer" : self.answers.iloc[idx],
+            # "answer_confidence" : self.answer_confidence.iloc[idx],
+            # "answer_id" : self.answer_ids.iloc[idx],
+            # "answer_type" : self.answer_types.iloc[idx],
+            # "multiple_choice_answer" : self.multiple_choice_answers.iloc[idx],
+            # "question_type" : self.question_types.iloc[idx]
         } 
+    
+"""
 
-def build_dataframe():
+Function which purpose is to retrieve data from the JSON files.
+If include_answers is True, the resulting DataFrame will contain a row for each 
+answer provided by users.
+If it is False, every row will only contain information about the question, question id and image id.
+Either way, it returns a pandas Dataframe.
+
+"""
+
+
+def build_dataframe(include_answers: bool) -> pd.DataFrame:
 
     header = [
         "image_id",
@@ -59,6 +93,10 @@ def build_dataframe():
         "answer_type", 
         "multiple_choice_answer",
         "question_type"
+    ] if include_answers else [
+        "image_id",
+        "question",  
+        "question_id"
     ]
     
     annotations_file = load_json(ANNOTATIONS_PATH)
@@ -70,40 +108,46 @@ def build_dataframe():
     assert(len(annotations) == len(questions)) 
 
     data = []
-    dataframe = pd.DataFrame(data, columns=header)
 
-
-    for (annotation, question) in zip (annotations, questions):
-        for answer in annotation['answers']:
+    # Considero solo risposte con confidence maybe o si?
+    if not include_answers:
+        for question in questions:
             data.append([
                 question['image_id'],
                 question['question'],
                 question['question_id'],
-                answer['answer'],
-                answer['answer_confidence'],
-                answer['answer_id'],
-                annotation['answer_type'],
-                annotation['multiple_choice_answer'],
-                annotation['question_type']
             ])
-            
-    
+    else:
+        for (annotation, question) in zip (annotations, questions):
+            for answer in annotation['answers']:
+                data.append([
+                    question['image_id'],
+                    question['question'],
+                    question['question_id'],
+                    answer['answer'],
+                    answer['answer_confidence'],
+                    answer['answer_id'],
+                    annotation['answer_type'],
+                    annotation['multiple_choice_answer'],
+                    annotation['question_type']
+                ])
+
     dataframe = pd.DataFrame(data, columns=header)
 
     return dataframe
 
 def build_dataset():
-    dataframe = build_dataframe()
+    dataframe = build_dataframe(include_answers=False)
     dataset = VQADataset(
         dataframe['image_id'],
         dataframe['question'],
         dataframe['question_id'],
-        dataframe['answer'],
-        dataframe['answer_confidence'],
-        dataframe['answer_id'],
-        dataframe['answer_type'],
-        dataframe['multiple_choice_answer'],
-        dataframe['question_type']
+        # df_grouped_by_question['answer'],
+        # df_grouped_by_question['answer_confidence'],
+        # df_grouped_by_question['answer_id'],
+        # df_grouped_by_question['answer_type'],
+        # df_grouped_by_question['multiple_choice_answer'],
+        # df_grouped_by_question['question_type']
     )
 
     return dataset
