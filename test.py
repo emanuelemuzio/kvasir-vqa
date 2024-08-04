@@ -7,9 +7,9 @@ from data.dataset import load_json, ANNOTATIONS_PATH
 import utils
 import os
 import csv
+import argparse
 
 gpu_available = torch.cuda.is_available()
-IMGS_PATH = 'data/val2014/COCO_val2014_[IDENTIFIER].jpg'
 IDENTIFIER_LEN = 12 
 
 """
@@ -184,6 +184,17 @@ def test_models():
             writer.writerow(["microsoft/git-base-vqav2", git_base_vqa_accuracy, "COCO"])
 
 def main():
+    parser = argparse.ArgumentParser(description ='Process some integers.')
+    parser.add_argument('integers', metavar ='N', 
+                    type = int, nargs ='+',
+                    help ='an integer for the accumulator')
+ 
+    parser.add_argument(dest ='accumulate', 
+                        action ='store_const',
+                        const = sum, 
+                        help ='sum the integers')
+    
+    args = parser.parse_args()
     test_models()
 
 if __name__ == '__main__':

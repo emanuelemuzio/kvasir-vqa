@@ -1,0 +1,55 @@
+{
+    "real": {
+        "annotations": {
+            "train": "data/v2_Annotations_Train_mscoco/v2_mscoco_train2014_annotations.json",
+            "val": "data/v2_Annotations_Val_mscoco/v2_mscoco_val2014_annotations.json"
+        },
+        "questions": {
+            "train": "data/v2_Questions_Train_mscoco/v2_OpenEnded_mscoco_train2014_questions.json",
+            "val": "data/v2_Questions_Val_mscoco/v2_OpenEnded_mscoco_val2014_questions.json",
+            "test": "data/v2_Questions_Test_mscoco/v2_OpenEnded_mscoco_test2015_questions.json"
+        },
+        "images": {
+            "train": "data/train2014/COCO_train2014_[ID].jpg",
+            "test": "data/test2015/COCO_test2015_[ID].jpg",
+            "val": "data/val2014/COCO_val2014_[ID].jpg"
+        }
+    },
+    "abstract": {
+        "binary": {
+            "annotations": {
+                "train": "data/Annotations_Binary_Train2017_abstract_v002/abstract_v002_train2017_annotations.json",
+                "val": "data/Annotations_Binary_Val2017_abstract_v002/abstract_v002_val2017_annotations.json"
+            },
+            "questions": {
+                "train": "data/Questions_Binary_Train2017_abstract_v002/OpenEnded_abstract_v002_train2017_questions.json",
+                "val": "data/Questions_Binary_Val2017_abstract_v002/OpenEnded_abstract_v002_val2017_questions.json"
+            },
+            "images": {
+                "train": "data/scene_img_abstract_v002_binary_train2017/scene_img_abstract_v002_train2017/abstract_v002_train2015_[ID].png",
+                "val": "data/scene_img_abstract_v002_binary_val2017/scene_img_abstract_v002_val2017/abstract_v002_val2015_[ID].png"
+            }
+        },
+        "annotations": {
+            "train": "",
+            "val": ""
+        },
+        "questions": {
+            "open_ended": {
+                "train": "data/Questions_Train_abstract_v002/OpenEnded_abstract_v002_train2015_questions.json",
+                "test": "data/Questions_Test_abstract_v002/OpenEnded_abstract_v002_test2015_questions.json",
+                "val": "data/Questions_Val_abstract_v002/OpenEnded_abstract_v002_val2015_questions.json"
+            },
+            "multiple_choice": {
+                "train": "data/Questions_Train_abstract_v002/MultipleChoice_abstract_v002_train2015_questions.json",
+                "test": "data/Questions_Test_abstract_v002/MultipleChoice_abstract_v002_test2015_questions.json",
+                "val": "data/Questions_Val_abstract_v002/MultipleChoice_abstract_v002_val2015_questions.json"
+            }
+        },
+        "images": {
+            "train": "data/scene_img_abstract_v002_train2015/abstract_v002_train2015_[ID].png",
+            "test": "data/scene_img_abstract_v002_test2015/abstract_v002_test2015_[ID].png",
+            "val": "data/scene_img_abstract_v002_val2015/abstract_v002_val2015_[ID].png"
+        }
+    }
+}

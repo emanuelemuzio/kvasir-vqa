@@ -9,11 +9,6 @@ files containing information about the question, the image and the answers provi
 
 """
 
-ANNOTATIONS_PATH = 'data/v2_mscoco_val2014_annotations.json'
-COMPLEMENTARY_PAIRS_PATH = 'data/v2_mscoco_val2014_complementary_pairs.json'
-QUESTIONS_PATH = 'data/v2_OpenEnded_mscoco_val2014_questions.json'
-COCO_PATH = 'data/val2014' 
-
 """"
 
 Simple function for loading the json files, which contains data about the annotated answers and questions
@@ -81,7 +76,7 @@ Either way, it returns a pandas Dataframe.
 """
 
 
-def build_dataframe(include_answers: bool) -> pd.DataFrame:
+def build_dataframe(include_answers: bool, annotations_path: str, question_path) -> pd.DataFrame:
 
     header = [
         "image_id",
@@ -99,10 +94,10 @@ def build_dataframe(include_answers: bool) -> pd.DataFrame:
         "question_id"
     ]
     
-    annotations_file = load_json(ANNOTATIONS_PATH)
+    annotations_file = load_json(annotations_path)
     annotations = annotations_file['annotations']
 
-    questions_file = load_json(QUESTIONS_PATH)
+    questions_file = load_json(question_path)
     questions = questions_file['questions']
 
     assert(len(annotations) == len(questions)) 
