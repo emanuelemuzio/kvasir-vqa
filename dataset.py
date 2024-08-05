@@ -1,6 +1,7 @@
 import torch.utils.data as data
 import pandas as pd
 from utils import load_json
+from tqdm.auto import tqdm
 
 """"
 
@@ -95,14 +96,14 @@ def build_dataframe(include_answers: bool, annotations_path: str, question_path)
 
     # Considero solo risposte con confidence maybe o si?
     if not include_answers:
-        for question in questions:
+        for question in tqdm(questions, desc='Looping questions'):
             data.append([
                 question['image_id'],
                 question['question'],
                 question['question_id'],
             ])
     else:
-        for (annotation, question) in zip (annotations, questions):
+        for (annotation, question) in tqdm(zip(annotations, questions), desc='Looping questions and annotations'):
             for answer in annotation['answers']:
                 data.append([
                     question['image_id'],
@@ -120,8 +121,8 @@ def build_dataframe(include_answers: bool, annotations_path: str, question_path)
 
     return dataframe
 
-def build_dataset():
-    dataframe = build_dataframe(include_answers=False)
+def build_dataset(annotations_path: str, questions_path: str):
+    dataframe = build_dataframe(False, annotations_path, questions_path)
     dataset = VQADataset(
         dataframe['image_id'],
         dataframe['question'],

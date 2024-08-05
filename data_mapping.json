@@ -31,8 +31,8 @@
             }
         },
         "annotations": {
-            "train": "",
-            "val": ""
+            "train": "data/Annotations_Train_abstract_v002/abstract_v002_train2015_annotations.json",
+            "val": "data/Annotations_Val_abstract_v002/abstract_v002_val2015_annotations.json"
         },
         "questions": {
             "open_ended": {

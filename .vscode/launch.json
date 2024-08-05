@@ -1,0 +1,45 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Test Abstract-Binary",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "--source" , "abstract,binary"
+            ]
+        },
+        {
+            "name": "Test Abstract Multiple Choice",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "--source" , "abstract", "--question_type", "multiple_choice"
+            ]
+        },
+        {
+            "name": "Test Abstract Open Ended",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "--source" , "abstract", "--question_type", "open_ended"
+            ]
+        },
+        {
+            "name": "Test Real",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "--source" , "real"
+            ]
+        }
+    ]
+}
