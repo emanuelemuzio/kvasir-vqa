@@ -11,3 +11,5 @@ Paper: https://arxiv.org/pdf/2205.14100
 
 Model: https://huggingface.co/dandelin/vilt-b32-finetuned-vqa
 Paper: https://arxiv.org/pdf/2102.03334
+
+14145 image ids are missing from validation set

@@ -71,7 +71,7 @@ def blip_vqa_test(dataset, annotations_path: str, imgs_path: str) -> float:
         del inputs
     
     del model
-    
+
     return format_accuracy(accuracy, len(annotations))
 
 """

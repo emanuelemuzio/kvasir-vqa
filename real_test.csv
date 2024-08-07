@@ -1,0 +1,4 @@
+model,accuracy
+Salesforce/blip-vqa-base,65.61%
+dandelin/vilt-b32-finetuned-vqa,62.60%
+microsoft/git-base-vqav2,64.86%
