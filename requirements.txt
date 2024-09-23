@@ -1,6 +1,8 @@
+python-dotenv
 transformers
 pandas
-pytorch-cuda==12.1
+datasets
+# pytorch-cuda==12.1
 torch 
 torchvision 
 # torchaudio --index-url https://download.pytorch.org/whl/cu121
