@@ -1,5 +1,6 @@
-data/*.json
-data/*/
+*.avi
+*.jpg
+*.png
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
