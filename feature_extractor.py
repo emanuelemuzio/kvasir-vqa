@@ -14,7 +14,7 @@ feature_extractor_name = os.getenv("FEATURE_EXTRACTOR")
 ## Classificatore KVASIR del bro su github
 ## ViT 
 ## KVASIR-VQA
-## 
+##  
 
 id2label = {'0': 'dyed-lifted-polyps', 
             '1': 'dyed-resection-margins', 
@@ -50,6 +50,8 @@ def extract_features(path: str):
     print(predicted_class)
 
 if __name__ == '__main__':
-    test = ["data\img\clb0lbx06dq4g086uc8pt0brb.jpg","data\img\cl8k2u1pn1dxf083248iz2qqy.jpg"]
-    for t in test:
-        extract_features(t)
+    # test = ["data\img\clb0lbx06dq4g086uc8pt0brb.jpg","data\img\cl8k2u1pn1dxf083248iz2qqy.jpg"]
+    # for t in test:
+    #     extract_features(t)
+    print(1)
+    
