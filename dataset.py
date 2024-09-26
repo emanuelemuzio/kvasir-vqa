@@ -6,7 +6,7 @@ from datasets import load_dataset
 load_dotenv()
 
 '''
-Download the dataset, splitted in the metadata.csv file and the imgs
+Download the KVASIR-VQA dataset, splitted in the metadata.csv file and the imgs
 '''
 
 def load() -> any:

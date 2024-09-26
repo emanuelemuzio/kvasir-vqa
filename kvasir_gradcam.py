@@ -64,7 +64,6 @@ load_dotenv()
 def prepare_data():
     rows = ['code','label','xmin','xmax','ymin','ymax']
     
-    
     # Kvasir instrument load
     
     kvasir_inst_json_data = None
@@ -87,10 +86,33 @@ def prepare_data():
                     bbox['ymax'],
                 ]
             )
-        
-    df = pd.DataFrame(kvasir_inst_data, columns=rows)
+
+    hyper_kvasir_json_data = None
+    hyper_kvasir_data = []
     
-    print(1)
+    with open(os.getenv('HYPER_KVASIR_SEGMENTED_BBOX'),'r') as file:
+        hyper_kvasir_json_data = json.load(file)
+        
+    hyper_kvasir_img_codes = hyper_kvasir_json_data.keys()
+    
+    for code in hyper_kvasir_img_codes:
+        for bbox in hyper_kvasir_json_data[code]['bbox']:
+            hyper_kvasir_data.append(
+                [
+                    code,
+                    bbox['label'],
+                    bbox['xmin'],
+                    bbox['xmax'],
+                    bbox['ymin'],
+                    bbox['ymax'],
+                ]
+            )
+
+    data = kvasir_inst_data + hyper_kvasir_data
+        
+    df = pd.DataFrame(data, columns=rows)
+    
+    return df
     
 prepare_data()    
 

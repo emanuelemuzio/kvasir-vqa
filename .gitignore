@@ -1,6 +1,7 @@
 *.avi
 *.jpg
 *.png
+/kvasir_vqa
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

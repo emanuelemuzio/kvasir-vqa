@@ -1,12 +1,12 @@
 {
-    "labeled-images" : {
-        "lower-gi-tract" : {
-            "anatomical-landmarks" : [ 
-                "cecum", 
-                "ileum", 
+    "labeled-images": {
+        "lower-gi-tract": {
+            "anatomical-landmarks": [
+                "cecum",
+                "ileum",
                 "retroflex-rectum"
             ],
-            "pathological-findings" : [
+            "pathological-findings": [
                 "hemorrhoids",
                 "polyps",
                 "ulcerative-colitis-grade-0-1",
@@ -16,28 +16,28 @@
                 "ulcerative-colitis-grade-2-3",
                 "ulcerative-colitis-grade-3"
             ],
-            "quality-of-mucosal-views" : [
+            "quality-of-mucosal-views": [
                 "bbps-0-1",
                 "bbps-2-3",
                 "impacted-stool"
             ],
-            "therapeutic-interventions" : [
+            "therapeutic-interventions": [
                 "dyed-lifted-polyps",
                 "dyed-resection-margins"
             ]
         },
-        "upper-gi-tract" : {
-            "anatomical-landmarks" : [
+        "upper-gi-tract": {
+            "anatomical-landmarks": [
                 "pylorus",
                 "retroflex-stomach",
                 "z-line"
+            ],
+            "pathological-findings": [
+                "barretts",
+                "barretts-short-segment",
+                "esophagitis-a",
+                "esophagitis-b-d"
             ]
-        },
-        "pathological-findings" : [
-            "barretts",
-            "barretts-short-segment",
-            "esophagitis-a",
-            "esophagitis-b-d"
-        ]
+        }
     }
 }
