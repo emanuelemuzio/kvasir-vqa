@@ -9,7 +9,7 @@ from torchvision import transforms, models
 from tqdm.auto import tqdm
 import torch
 import numpy as np
-# import cv2 as cv
+import cv2 as cv
 import warnings
 import random
 import matplotlib.pyplot as plt
@@ -18,51 +18,54 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# class CustomKvasir(Dataset):
-#     def __init__(self, img, labels, class_names, num_images=50, train=False):  # Added parameter for the number of images per batch
-#         self.img = img
-#         self.label = labels
-#         self.class_names = class_names
-#         self.num_images = num_images  # Store the number of images per batch
-#         self.transform = None
-#         self.train = train
+class KvasirVQAGradCAM(Dataset):
+    def __init__(self, img, label, class_names, identifier, num_images=50, train=False):  # Added parameter for the number of images per batch
+        self.img = img
+        self.label = label
+        self.class_names = class_names
+        self.num_images = num_images  # Store the number of images per batch
+        self.transform = None
+        self.train = train
+        self.identifier = identifier
         
-#         # Define class names
-#         # self.class_names = {0: 'apple', 1: 'banana', 2: 'grape', 3: 'orange', 4: 'pineapple', 5: 'watermelon'}
+        # Define class names
+        # self.class_names = {0: 'apple', 1: 'banana', 2: 'grape', 3: 'orange', 4: 'pineapple', 5: 'watermelon'}
         
-#         # Define transformations
-#         if self.train:
-#             self.transform = transforms.Compose([
-#                 transforms.RandomResizedCrop(240),
-#                 transforms.RandomHorizontalFlip(),
-#                 transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
-#                 transforms.ToTensor(),
-#                 transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-#             ])
-#         else:
-#             self.transform = transforms.Compose([
-#                 transforms.Resize(224),
-#                 transforms.ToTensor(),
-#                 transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-#             ])
+        # Define transformations
+        if self.train:
+            self.transform = transforms.Compose([
+                transforms.RandomResizedCrop(240),
+                transforms.RandomHorizontalFlip(),
+                transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ])
+        else:
+            self.transform = transforms.Compose([
+                transforms.Resize(224),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ])
     
-#     def __len__(self):
-#         return len(self.img)
+    def __len__(self):
+        return len(self.img)
 
-#     def __getitem__(self, idx):
-#         img = self.img[idx]
-#         label = self.label[idx]
+    def __getitem__(self, idx):
+        img = self.img[idx]
+        label = self.label[idx]
+        identifier = self.identifier[idx]
         
-#         # Apply transformations
-#         transformed_image = self.transform(Image.fromarray(img))
+        # Apply transformations
+        transformed_image = self.transform(Image.fromarray(img))
         
-#         return {
-#             'img' : transformed_image,
-#             'label' : label
-#         }
+        return {
+            'img' : transformed_image,
+            'label' : label,
+            'identifier' : identifier
+        }
       
 def prepare_data():
-    rows = ['code','label','xmin','xmax','ymin','ymax']
+    rows = ['img','label','id']
     
     # Kvasir instrument load
     
@@ -76,14 +79,13 @@ def prepare_data():
     
     for code in kvasir_inst_img_codes:
         for bbox in kvasir_inst_json_data[code]['bbox']:
+            im = cv.imread(f"{os.getenv('KVASIR_INST_IMG')}/{code}.jpg")
+            im = im[bbox['ymin']:bbox['ymax'], bbox['xmin']:bbox['xmax']]
             kvasir_inst_data.append(
                 [
-                    code,
+                    im,
                     bbox['label'],
-                    bbox['xmin'],
-                    bbox['xmax'],
-                    bbox['ymin'],
-                    bbox['ymax'],
+                    code
                 ]
             )
 
@@ -97,14 +99,13 @@ def prepare_data():
     
     for code in hyper_kvasir_img_codes:
         for bbox in hyper_kvasir_json_data[code]['bbox']:
-            hyper_kvasir_data.append(
+            im = cv.imread(f"{os.getenv('HYPER_KVASIR_SEGMENTED_IMG')}/{code}.jpg")
+            im = im[bbox['ymin']:bbox['ymax'], bbox['xmin']:bbox['xmax']]
+            kvasir_inst_data.append(
                 [
-                    code,
+                    im,
                     bbox['label'],
-                    bbox['xmin'],
-                    bbox['xmax'],
-                    bbox['ymin'],
-                    bbox['ymax'],
+                    code
                 ]
             )
 
@@ -113,12 +114,13 @@ def prepare_data():
     df = pd.DataFrame(data, columns=rows)
     
     return df
-    
-prepare_data()    
 
+if __name__ == '__main__':
+    print(1)
+    dataset = prepare_data()    
+    class_names = dataset.label.unique()
+    train_dataset = KvasirVQAGradCAM(dataset['img'], dataset['label'], class_names, dataset['id'], 200, True)
 
-# exit(0)        
-    
 # train_dataset = MultiLabelDataset(num_images=200)
 # val_dataset = MultiLabelDataset(sub_root='valid', num_images=50, train=False)
 
