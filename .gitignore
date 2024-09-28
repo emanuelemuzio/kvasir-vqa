@@ -2,6 +2,7 @@
 *.jpg
 *.png
 /kvasir_vqa
+*.pt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
