@@ -18,6 +18,8 @@ from torch.nn import CrossEntropyLoss
 import torch.optim as optim
 from sklearn.preprocessing import LabelEncoder
 from torcheval.metrics.functional import multiclass_accuracy
+from datetime import datetime
+import shutil
 
 load_dotenv()
 
@@ -199,7 +201,8 @@ def evaluate(model,
             val_loss_ckp = [],
             val_acc_ckp = [],
             best_acc_ckp = - np.inf,
-            start_epoch = 1):
+            start_epoch = 1,
+            run_id='test'):
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
     
@@ -243,14 +246,9 @@ def evaluate(model,
                 'train_acc' : train_acc,
                 'val_loss' : val_loss,
                 'val_acc' : val_acc,
-                'best_acc' : best_acc
-            }, os.getenv('KVASIR_GRADCAM_CHECKPOINT'))
-
-        # train_loss_ckp = checkpoint['train_loss']
-        # train_acc_ckp = checkpoint['train_acc']
-        # val_loss_ckp = checkpoint['val_loss']
-        # val_acc_ckp = checkpoint['val_acc']
-        # best_acc_ckp = checkpoint['best_acc']
+                'best_acc' : best_acc,
+                'run_id' : run_id
+            }, os.getenv('KVASIR_GRADCAM_CHECKPOINT')) 
             
         if early_stopper.early_stop(epoch_val_loss):             
             break
@@ -316,7 +314,14 @@ def val(model, val_dataset, criterion, device, encoder):
         
         return val_loss, val_acc 
  
+def generate_run_id():
+    now = datetime.now()
+    now = now.strftime("%d%m%Y%H%M%S")
+    return now
+
 if __name__ == '__main__':
+
+    run_id = generate_run_id()
     dataset = prepare_data()    
     class_names = dataset.label.unique()
     enc = LabelEncoder()
@@ -329,20 +334,17 @@ if __name__ == '__main__':
 
     pretrained_model = prepare_pretrained_model(num_classes)
     
+    # # Train run hyper parameters
     # Define loss function (Binary Cross Entropy Loss in this case, for multi-label classification)
     criterion = CrossEntropyLoss()
-
     lr = 0.001
-    momentum = 0.9
-
-    # # Define optimizer
+    momentum = 0.8
+    # Define optimizer
     optimizer = optim.SGD(pretrained_model.parameters(), lr=lr, momentum=momentum)
-    
     early_stopper = EarlyStopper(patience=3, min_delta=0.5)
-
-    # # Training loop
-    num_epochs = 50
-    batch_size = 18
+    # Training loop
+    num_epochs = 100
+    batch_size = 25
     
     pretrained_model.to(device)
 
@@ -353,15 +355,22 @@ if __name__ == '__main__':
     best_acc_ckp = None 
     start_epoch = 1
 
+    run_path = None
+    
     if os.path.exists(os.getenv('KVASIR_GRADCAM_CHECKPOINT')):
         checkpoint = torch.load(os.getenv('KVASIR_GRADCAM_CHECKPOINT'), weights_only=True)
-        pretrained_model.state_dict(checkpoint['model_state_dict'])
+        pretrained_model.load_state_dict(checkpoint['model_state_dict'])
         start_epoch = checkpoint['num_epochs']
         train_loss_ckp = checkpoint['train_loss']
         train_acc_ckp = checkpoint['train_acc']
         val_loss_ckp = checkpoint['val_loss']
         val_acc_ckp = checkpoint['val_acc']
         best_acc_ckp = checkpoint['best_acc']
+        run_id = checkpoint['run_id']
+        run_path = f"{os.getenv('KVASIR_GRADCAM_RUNS')}/{run_id}"
+    else:
+        run_path = f"{os.getenv('KVASIR_GRADCAM_RUNS')}/{run_id}"
+        os.mkdir(run_path)
 
     train_loss, train_acc, val_loss, val_acc, best_acc, best_weights = evaluate(
         model=pretrained_model, 
@@ -379,14 +388,38 @@ if __name__ == '__main__':
         val_loss_ckp = val_loss_ckp,
         val_acc_ckp = val_acc_ckp,
         best_acc_ckp = best_acc_ckp,
-        start_epoch = start_epoch)
+        start_epoch = start_epoch,
+        run_id=run_id)
     
-    torch.save(best_weights, os.getenv('KVASIR_GRADCAM_MODEL'))
+    torch.save(best_weights, f"{run_path}/model.pt")
 
-    # Plotting the evolution of loss
-    # plt.plot(train_losses, label='Training Loss')
-    # plt.xlabel('Epoch')
-    # plt.ylabel('Loss')
-    # plt.title('Evolution of Training Loss')
-    # plt.legend()
-    # plt.show()
+    with open(f"{run_path}/run.json", "w") as f:
+        config = {
+            'criterion' : criterion.__class__.__name__,
+            'lr' : lr,
+            'num_epochs' : num_epochs,
+            'batch_size' : batch_size,
+            'momentum' : momentum,
+            'train_loss' : train_loss,
+            'train_acc' : train_acc,
+            'val_loss' : val_loss,
+            'val_acc' : val_acc,
+            'best_acc' : best_acc
+        }
+        json.dump(config, f)
+
+    os.remove(os.getenv('KVASIR_GRADCAM_CHECKPOINT'))
+
+    runs = os.listdir(f"{os.getenv('KVASIR_GRADCAM_RUNS')}")
+    best_run = None
+
+    if len(runs) > 0:
+        runs_best_acc = 0
+        for run in runs:
+            with open(f"{os.getenv('KVASIR_GRADCAM_RUNS')}/{run}/run.json", 'r') as f:
+                data = json.load(f)
+                runs_best_acc = data['best_acc'] if data['best_acc'] > runs_best_acc else runs_best_acc
+                best_run = run
+        if os.path.exists(f"{os.getenv('KVASIR_GRADCAM_MODEL')}"):
+            os.remove(f"{os.getenv('KVASIR_GRADCAM_MODEL')}")
+        shutil.copyfile(f"{os.getenv('KVASIR_GRADCAM_RUNS')}/{run}/model.pt", f"{os.getenv('KVASIR_GRADCAM_MODEL')}")
