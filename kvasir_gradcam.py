@@ -3,69 +3,88 @@
 import os
 import pandas as pd
 from torchvision.io import read_image
-from PIL import Image, ImageDraw
-from torch.utils.data import Dataset, WeightedRandomSampler, DataLoader
-from torchvision import transforms, models
+from torch.utils.data import Dataset, DataLoader
+from torchvision import models
+from torchvision.transforms import v2
+from torchvision.models import ResNet50_Weights
 from tqdm.auto import tqdm
 import torch
 import numpy as np
-import cv2 as cv
-import warnings
-import random
-import matplotlib.pyplot as plt
 import json
 from dotenv import load_dotenv
+from torch import nn, optim
+from torchvision import models
+from torch.nn import CrossEntropyLoss
+import torch.optim as optim
+from sklearn.preprocessing import LabelEncoder
+from torcheval.metrics.functional import multiclass_accuracy
 
 load_dotenv()
 
-class KvasirVQAGradCAM(Dataset):
-    def __init__(self, img, label, class_names, identifier, num_images=50, train=False):  # Added parameter for the number of images per batch
-        self.img = img
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+class Kvasir(Dataset):
+    def __init__(self, path, label, code, bbox, train=False):  # Added parameter for the number of images per batch
+        self.path = path
         self.label = label
-        self.class_names = class_names
-        self.num_images = num_images  # Store the number of images per batch
+        self.code = code
+        self.bbox = bbox
+        # self.class_names = class_names
         self.transform = None
-        self.train = train
-        self.identifier = identifier
-        
-        # Define class names
-        # self.class_names = {0: 'apple', 1: 'banana', 2: 'grape', 3: 'orange', 4: 'pineapple', 5: 'watermelon'}
-        
+        self.train = train 
+         
         # Define transformations
         if self.train:
-            self.transform = transforms.Compose([
-                transforms.RandomResizedCrop(240),
-                transforms.RandomHorizontalFlip(),
-                transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            self.transform = v2.Compose([
+                v2.RandomResizedCrop(240),
+                v2.RandomHorizontalFlip(),
+                v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+                v2.ToDtype(torch.float32, scale=True),
+                v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ])
         else:
-            self.transform = transforms.Compose([
-                transforms.Resize(224),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            self.transform = v2.Compose([
+                v2.Resize((224, 224)),
+                v2.ToDtype(torch.float32, scale=True),
+                v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ])
     
     def __len__(self):
-        return len(self.img)
+        return len(self.code)
 
     def __getitem__(self, idx):
-        img = self.img[idx]
         label = self.label[idx]
-        identifier = self.identifier[idx]
-        
+        path = self.path[idx]
+        code = self.code[idx] 
+        full_path = f"{path}/{code}.jpg"
+        img = read_image(full_path)
+        bbox = self.bbox[idx] 
+        if len(bbox) > 0:
+            img = img[:, bbox[0]:bbox[1], bbox[2]:bbox[3]]
+
         # Apply transformations
-        transformed_image = self.transform(Image.fromarray(img))
+        transformed_image = self.transform(img)
         
-        return {
-            'img' : transformed_image,
-            'label' : label,
-            'identifier' : identifier
-        }
+        return transformed_image, label, path, code 
+    
+class EarlyStopper:
+    def __init__(self, patience=1, min_delta=0):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.counter = 0
+        self.min_validation_loss = float('inf')
+
+    def early_stop(self, validation_loss):
+        if validation_loss < self.min_validation_loss:
+            self.min_validation_loss = validation_loss
+            self.counter = 0
+        elif validation_loss > (self.min_validation_loss + self.min_delta):
+            self.counter += 1
+            if self.counter >= self.patience:
+                return True
+        return False
       
 def prepare_data():
-    rows = ['img','label','id']
+    rows = ['path','label','code','bbox']
     
     # Kvasir instrument load
     
@@ -79,231 +98,295 @@ def prepare_data():
     
     for code in kvasir_inst_img_codes:
         for bbox in kvasir_inst_json_data[code]['bbox']:
-            im = cv.imread(f"{os.getenv('KVASIR_INST_IMG')}/{code}.jpg")
-            im = im[bbox['ymin']:bbox['ymax'], bbox['xmin']:bbox['xmax']]
+            # im = cv.imread(f"{os.getenv('KVASIR_INST_IMG')}/{code}.jpg")
+            # im = im[bbox['ymin']:bbox['ymax'], bbox['xmin']:bbox['xmax']]
+            # im = cv.cvtColor(im, cv.COLOR_BGR2RGB)
+            path = os.getenv('KVASIR_INST_IMG')
             kvasir_inst_data.append(
                 [
-                    im,
+                    path,
                     bbox['label'],
-                    code
+                    code,
+                    [bbox['ymin'], bbox['ymax'], bbox['xmin'], bbox['xmax']]
                 ]
-            )
+            ) 
 
-    hyper_kvasir_json_data = None
+    # Hyper Kvasir Segmented images loading
+    # The segmented ones are only related to the polyps class
+
+    hyper_kvasir_segmented_json_data = None
     hyper_kvasir_data = []
     
     with open(os.getenv('HYPER_KVASIR_SEGMENTED_BBOX'),'r') as file:
-        hyper_kvasir_json_data = json.load(file)
+        hyper_kvasir_segmented_json_data = json.load(file)
         
-    hyper_kvasir_img_codes = hyper_kvasir_json_data.keys()
+    hyper_kvasir_segmented_img_codes = hyper_kvasir_segmented_json_data.keys()
     
-    for code in hyper_kvasir_img_codes:
-        for bbox in hyper_kvasir_json_data[code]['bbox']:
-            im = cv.imread(f"{os.getenv('HYPER_KVASIR_SEGMENTED_IMG')}/{code}.jpg")
-            im = im[bbox['ymin']:bbox['ymax'], bbox['xmin']:bbox['xmax']]
-            kvasir_inst_data.append(
+    for code in hyper_kvasir_segmented_img_codes:
+        for bbox in hyper_kvasir_segmented_json_data[code]['bbox']:
+            # im = cv.imread(f"{os.getenv('KVASIR_INST_IMG')}/{code}.jpg")
+            # im = im[bbox['ymin']:bbox['ymax'], bbox['xmin']:bbox['xmax']]
+            # im = cv.cvtColor(im, cv.COLOR_BGR2RGB)
+            path = os.getenv('HYPER_KVASIR_SEGMENTED_IMG')
+            hyper_kvasir_data.append(
                 [
-                    im,
+                    path,
                     bbox['label'],
-                    code
+                    code,
+                    [bbox['ymin'], bbox['ymax'], bbox['xmin'], bbox['xmax']]
+                ]
+            ) 
+
+    # Labeled Kvasir Image question
+
+    hyper_kvasir_labeled_img_paths = []
+    
+    with open(os.getenv('HYPER_KVASIR_LABELED_IMG_PATHS'),'r') as file:
+        hyper_kvasir_labeled_img_paths = json.load(file)
+
+    for path in hyper_kvasir_labeled_img_paths:
+        label = path.split("/")
+        label = label[-1]
+        for code in os.listdir(f"{os.getenv('HYPER_KVASIR')}/{path}"):
+            hyper_kvasir_data.append(
+                [
+                    f"{os.getenv('HYPER_KVASIR')}/{path}",
+                    label,
+                    code[:-4],
+                    []
                 ]
             )
 
-    data = kvasir_inst_data + hyper_kvasir_data
-        
-    df = pd.DataFrame(data, columns=rows)
+    data = kvasir_inst_data + hyper_kvasir_data 
+
+    df = pd.DataFrame(data, columns=rows) 
     
     return df
 
+def prepare_pretrained_model(num_classes):
+    # # Initialize pre-trained model
+    pretrained_model = models.resnet50(weights=ResNet50_Weights.DEFAULT)
+    pretrained_model.fc = nn.Linear(pretrained_model.fc.in_features, num_classes)
+
+    # # Freeze the parameters of the pre-trained layers
+    for param in pretrained_model.parameters():
+        param.requires_grad = False
+
+    # # Unfreeze the parameters of the last few layers for fine-tuning
+    for param in pretrained_model.layer4.parameters():
+        param.requires_grad = True
+
+    return pretrained_model
+
+def df_train_test_split(df, test_size=0.2):
+    msk = np.random.rand(len(df)) < test_size
+    train_set = df[~msk]
+    test_set = df[msk]
+    return train_set, test_set
+
+def evaluate(model, 
+            num_epochs, 
+            batch_size, 
+            optimizer, 
+            device, 
+            train_dataset, 
+            val_dataset, 
+            criterion, 
+            early_stopper, 
+            encoder, 
+            train_loss_ckp = [],
+            train_acc_ckp = [],
+            val_loss_ckp = [],
+            val_acc_ckp = [],
+            best_acc_ckp = - np.inf,
+            start_epoch = 1):
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
+    
+    train_loss = []
+    val_loss = []
+
+    train_acc = []
+    val_acc = []
+    best_acc = - np.inf
+    best_weights = None
+
+    if train_loss_ckp is not None:
+        train_loss += train_loss_ckp
+        train_acc += train_acc_ckp
+        val_loss += val_loss_ckp
+        val_acc += val_acc_ckp
+        best_acc = best_acc_ckp
+
+    # Ciclo di addestramento
+
+    for epoch in tqdm(range(start_epoch, num_epochs + 1)):
+        torch.cuda.empty_cache()
+        epoch_train_loss, epoch_train_acc = train(model, train_dataloader, criterion, optimizer, device, encoder)
+        train_loss.append(epoch_train_loss)
+        train_acc.append(epoch_train_acc)
+        
+        epoch_val_loss, epoch_val_acc = val(model, val_dataloader, criterion, device, encoder)
+        val_loss.append(epoch_val_loss)
+        val_acc.append(epoch_val_acc)
+        
+        print(f"\nEpoch [{epoch}/{num_epochs}] Train Loss: {epoch_train_loss:.4f}  Validation Loss: {epoch_val_loss:.4f}, Validation Accuracy: {epoch_val_acc*100:.2f}%")
+        
+        if epoch_val_acc > best_acc:
+            best_acc = epoch_val_acc
+            best_weights = model.state_dict()
+
+            torch.save({
+                'model_state_dict' : best_weights,
+                'num_epochs' : epoch,
+                'train_loss' : train_loss,
+                'train_acc' : train_acc,
+                'val_loss' : val_loss,
+                'val_acc' : val_acc,
+                'best_acc' : best_acc
+            }, os.getenv('KVASIR_GRADCAM_CHECKPOINT'))
+
+        # train_loss_ckp = checkpoint['train_loss']
+        # train_acc_ckp = checkpoint['train_acc']
+        # val_loss_ckp = checkpoint['val_loss']
+        # val_acc_ckp = checkpoint['val_acc']
+        # best_acc_ckp = checkpoint['best_acc']
+            
+        if early_stopper.early_stop(epoch_val_loss):             
+            break
+            
+    return train_loss, train_acc, val_loss, val_acc, best_acc, best_weights
+        
+def train(model, train_dataset, criterion, optimizer, device, encoder):
+    model.train()
+
+    train_loss = 0.0
+    train_acc = 0.0
+
+    for i, (img, label, __, _) in enumerate(train_dataset):
+
+        img = img.unsqueeze(0).to(device)[0]
+        label = torch.tensor(encoder.transform(label)).to(device)
+
+        optimizer.zero_grad()
+
+        output = model(img)
+
+        loss = criterion(output, label)
+
+        loss.backward()
+
+        optimizer.step()
+
+        acc = multiclass_accuracy(output, label) 
+        train_acc += acc.item()
+        train_loss += loss.item()
+
+    train_loss = train_loss / len(train_dataset)
+    train_acc = train_acc / len(train_dataset)
+
+    return train_loss, train_acc
+
+def val(model, val_dataset, criterion, device, encoder):
+    # Evaluate the model on the validation set
+    model.eval()
+    val_loss = 0.0
+    val_acc = 0.0
+        
+    with torch.no_grad():
+        for i, (img, label, _, _) in enumerate(val_dataset):
+            img = img.unsqueeze(0).to(device)[0]
+            label = torch.tensor(encoder.transform(label)).to(device)
+
+            optimizer.zero_grad()
+
+            output = model(img)
+
+            loss = criterion(output, label)
+            
+            acc = multiclass_accuracy(output, label)
+            val_acc += acc.item()
+            val_loss += loss.item()
+
+        # Calculate validation loss
+        val_loss /= len(val_dataset)
+
+        # Calculate validation accuracy
+        val_acc = val_acc / len(val_dataset)
+        
+        return val_loss, val_acc 
+ 
 if __name__ == '__main__':
-    print(1)
     dataset = prepare_data()    
     class_names = dataset.label.unique()
-    train_dataset = KvasirVQAGradCAM(dataset['img'], dataset['label'], class_names, dataset['id'], 200, True)
+    enc = LabelEncoder()
+    enc.fit(class_names)
+    train_set, val_set = df_train_test_split(dataset, 0.2)
+    train_dataset = Kvasir(train_set['path'].to_numpy(), train_set['label'].to_numpy(), train_set['code'].to_numpy(), train_set['bbox'].to_numpy(), train=True)
+    val_dataset = Kvasir(val_set['path'].to_numpy(), val_set['label'].to_numpy(), val_set['code'].to_numpy(), val_set['bbox'].to_numpy(), train=False)
 
-# train_dataset = MultiLabelDataset(num_images=200)
-# val_dataset = MultiLabelDataset(sub_root='valid', num_images=50, train=False)
+    num_classes = len(class_names)
 
-# for i, data in enumerate(train_dataset):
-#     images, labels = data[0], data[1]
-#     class_index = torch.argmax(labels[0])  # Get index of the first non-zero label
-#     class_name = train_dataset.class_names[class_index.item()]  # Convert index to class name
-#     plt.title(class_name)
-#     plt.imshow(np.transpose(images.numpy(), (1, 2, 0)))  # Transpose the image to (240, 240, 3)
-#     plt.show()
+    pretrained_model = prepare_pretrained_model(num_classes)
     
-#     # Obtain the path of the plotted image
-#     image_path = train_dataset.get_image_path(i)
-#     # Read the original image using OpenCV
-#     original_image = cv2.imread(image_path)
-#     original_image = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
+    # Define loss function (Binary Cross Entropy Loss in this case, for multi-label classification)
+    criterion = CrossEntropyLoss()
 
-#     # Plot the original image
-#     plt.title("Original Image")
-#     plt.imshow(original_image)
-#     plt.axis('off')
+    lr = 0.001
+    momentum = 0.9
+
+    # # Define optimizer
+    optimizer = optim.SGD(pretrained_model.parameters(), lr=lr, momentum=momentum)
     
-#     # Obtain the labels of the plotted image
-#     image_labels = train_dataset.get_labels(i)
-#     print("Labels:", image_labels)
-#     break
+    early_stopper = EarlyStopper(patience=3, min_delta=0.5)
 
-# for i, data in enumerate(val_dataset):
-#     images, labels = data[0], data[1]
-#     class_index = torch.argmax(labels[0])  # Get index of the first non-zero label
-#     class_name = val_dataset.class_names[class_index.item()]  # Convert index to class name
-#     plt.title(class_name)
-#     plt.imshow(np.transpose(images.numpy(), (1, 2, 0)))  # Transpose the image to (240, 240, 3)
-#     plt.show()
-#     # Obtain the path of the plotted image
-#     image_path = val_dataset.get_image_path(i)
-#     # Read the original image using OpenCV
-#     original_image = cv2.imread(image_path)
-#     original_image = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
-
-#     # Plot the original image
-#     plt.title("Original Image")
-#     plt.imshow(original_image)
-#     plt.axis('off')
+    # # Training loop
+    num_epochs = 50
+    batch_size = 18
     
-#     # Obtain the labels of the plotted image
-#     image_labels = train_dataset.get_labels(i)
-#     print("Labels:", image_labels)
-#     break
+    pretrained_model.to(device)
 
-# from torch import nn, optim
-# from torchvision import models
+    train_loss_ckp = None
+    train_acc_ckp = None
+    val_loss_ckp = None
+    val_acc_ckp = None
+    best_acc_ckp = None 
+    start_epoch = 1
 
-# # Initialize pre-trained model
-# pretrained_model = models.resnet50(pretrained=True)
+    if os.path.exists(os.getenv('KVASIR_GRADCAM_CHECKPOINT')):
+        checkpoint = torch.load(os.getenv('KVASIR_GRADCAM_CHECKPOINT'), weights_only=True)
+        pretrained_model.state_dict(checkpoint['model_state_dict'])
+        start_epoch = checkpoint['num_epochs']
+        train_loss_ckp = checkpoint['train_loss']
+        train_acc_ckp = checkpoint['train_acc']
+        val_loss_ckp = checkpoint['val_loss']
+        val_acc_ckp = checkpoint['val_acc']
+        best_acc_ckp = checkpoint['best_acc']
 
-# # Iterate through the named modules and print each one
-# for name, layer in pretrained_model.named_modules():
-#     display(name, layer)
+    train_loss, train_acc, val_loss, val_acc, best_acc, best_weights = evaluate(
+        model=pretrained_model, 
+        num_epochs=num_epochs, 
+        batch_size=batch_size,
+        optimizer=optimizer, 
+        device=device, 
+        train_dataset=train_dataset, 
+        val_dataset=val_dataset, 
+        criterion=criterion, 
+        early_stopper=early_stopper, 
+        encoder=enc,
+        train_loss_ckp = train_loss_ckp,
+        train_acc_ckp = train_acc_ckp,
+        val_loss_ckp = val_loss_ckp,
+        val_acc_ckp = val_acc_ckp,
+        best_acc_ckp = best_acc_ckp,
+        start_epoch = start_epoch)
     
-# # Get the last layer of the model
-# last_layer_name, last_layer = list(pretrained_model.named_children())[-1]
-# # Print information about the last layer
-# print("Last Layer Name:", last_layer_name)
-# print("Last Layer:", last_layer)
+    torch.save(best_weights, os.getenv('KVASIR_GRADCAM_MODEL'))
 
-# num_classes = 6
-
-# pretrained_model.fc = nn.Linear(pretrained_model.fc.in_features, num_classes)
-
-# # Freeze the parameters of the pre-trained layers
-# for param in pretrained_model.parameters():
-#     param.requires_grad = False
-
-# # Unfreeze the parameters of the last few layers for fine-tuning
-# for param in pretrained_model.layer4.parameters():
-#     param.requires_grad = True
-
-# last_layer_name, last_layer = list(pretrained_model.layer4())
-# print("New last layer:", last_layer)
-
-# last_layer_name, last_layer = list(pretrained_model.named_children())[-1]
-# print("New last layer:", last_layer)
-
-# from torch.nn import BCEWithLogitsLoss
-# import torch.optim as optim
-
-# # Define loss function (Binary Cross Entropy Loss in this case, for multi-label classification)
-# criterion = BCEWithLogitsLoss()
-
-# # Define optimizer
-# optimizer = optim.SGD(pretrained_model.parameters(), lr=0.001, momentum=0.9)
-
-# # Training loop
-# num_epochs = 50
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# pretrained_model.to(device)
-
-# train_losses = []  # To store the losses for plotting
-# best_val_loss = float('inf')  # Initialize with a very large value
-
-# # Train the model
-# for epoch in range(num_epochs):
-    
-#     # Train the model on the training set
-#     pretrained_model.train()
-    
-#     # Initialize the training loss accumulator to zero
-#     training_loss = 0.0
-    
-#     for i, (image, labels) in enumerate(train_dataset):
-#         # Prepare data and send it to the proper device
-#         image = image.unsqueeze(0).to(device)
-#         labels = labels.float().to(device)
-
-#         # Clear the gradients of all optimized parameters
-#         optimizer.zero_grad()
-
-#         # Forward pass: obtain model predictions for the input data
-#         outputs = pretrained_model(image)
-
-#         # Compute the loss between the model predictions and the true labels
-#         loss = criterion(outputs, labels)
-
-#         # Backward pass: compute gradients of the loss with respect to model parameters
-#         loss.backward()
-
-#         # Update model parameters using the computed gradients and the optimizer
-#         optimizer.step()
-
-#         # Update the training loss
-#         training_loss += loss.item()
-
-#     # Calculate average training loss
-#     train_loss = training_loss / len(train_dataset)
-#     train_losses.append(train_loss)
-
-#     # Evaluate the model on the validation set
-#     pretrained_model.eval()
-#     val_loss = 0.0
-#     correct_preds = 0
-#     total_samples = 0
-#     with torch.no_grad():
-#         for image, labels in val_dataset:
-#             # Prepare data and send it to the proper device
-#             image = image.unsqueeze(0).to(device)
-#             labels = labels.float().to(device)
-
-#             # Forward pass: obtain model predictions for the input data
-#             outputs = pretrained_model(image)
-
-#             # Compute the loss between the model predictions and the true labels
-#             loss = criterion(outputs, labels)
-
-#             # Update the validation loss
-#             val_loss += loss.item()
-
-#             # Round up and down to either 1 or 0
-#             predicted = torch.round(outputs)
-#             total_samples += labels.size(0)
-#             # Calculate how many images were correctly classified
-#             correct_preds += torch.sum(torch.all(torch.eq(predicted, labels), dim=1)).item()
-
-#     # Calculate validation loss
-#     val_loss /= len(val_dataset)
-
-#     # Calculate validation accuracy
-#     val_acc = correct_preds / total_samples * 100
-
-#     # Print validation loss and accuracy
-#     print(f"Epoch [{epoch + 1}/{num_epochs}] Train Loss: {train_loss:.4f}  Validation Loss: {val_loss:.4f}, Validation Accuracy: {val_acc:.2f}%")
-
-#     # Save the model if it performs better on validation set
-#     if val_loss < best_val_loss:
-#         best_val_loss = val_loss
-#         torch.save(pretrained_model.state_dict(), f'model/train/best_model_epoch_{epoch + 1}.pth')
-
-# print('Finished Training')
-
-# # Plotting the evolution of loss
-# plt.plot(train_losses, label='Training Loss')
-# plt.xlabel('Epoch')
-# plt.ylabel('Loss')
-# plt.title('Evolution of Training Loss')
-# plt.legend()
-# plt.show()
+    # Plotting the evolution of loss
+    # plt.plot(train_losses, label='Training Loss')
+    # plt.xlabel('Epoch')
+    # plt.ylabel('Loss')
+    # plt.title('Evolution of Training Loss')
+    # plt.legend()
+    # plt.show()

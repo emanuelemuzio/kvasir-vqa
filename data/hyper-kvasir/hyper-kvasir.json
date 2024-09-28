@@ -1,43 +1,25 @@
-{
-    "labeled-images": {
-        "lower-gi-tract": {
-            "anatomical-landmarks": [
-                "cecum",
-                "ileum",
-                "retroflex-rectum"
-            ],
-            "pathological-findings": [
-                "hemorrhoids",
-                "polyps",
-                "ulcerative-colitis-grade-0-1",
-                "ulcerative-colitis-grade-1",
-                "ulcerative-colitis-grade-1-2",
-                "ulcerative-colitis-grade-2",
-                "ulcerative-colitis-grade-2-3",
-                "ulcerative-colitis-grade-3"
-            ],
-            "quality-of-mucosal-views": [
-                "bbps-0-1",
-                "bbps-2-3",
-                "impacted-stool"
-            ],
-            "therapeutic-interventions": [
-                "dyed-lifted-polyps",
-                "dyed-resection-margins"
-            ]
-        },
-        "upper-gi-tract": {
-            "anatomical-landmarks": [
-                "pylorus",
-                "retroflex-stomach",
-                "z-line"
-            ],
-            "pathological-findings": [
-                "barretts",
-                "barretts-short-segment",
-                "esophagitis-a",
-                "esophagitis-b-d"
-            ]
-        }
-    }
-}
+[
+    "labeled-images/lower-gi-tract/anatomical-landmarks/cecum",
+    "labeled-images/lower-gi-tract/anatomical-landmarks/ileum",
+    "labeled-images/lower-gi-tract/anatomical-landmarks/retroflex-rectum",
+    "labeled-images/lower-gi-tract/pathological-findings/hemorrhoids",
+    "labeled-images/lower-gi-tract/pathological-findings/polyps",
+    "labeled-images/lower-gi-tract/pathological-findings/ulcerative-colitis-grade-0-1",
+    "labeled-images/lower-gi-tract/pathological-findings/ulcerative-colitis-grade-1",
+    "labeled-images/lower-gi-tract/pathological-findings/ulcerative-colitis-grade-1-2",
+    "labeled-images/lower-gi-tract/pathological-findings/ulcerative-colitis-grade-2",
+    "labeled-images/lower-gi-tract/pathological-findings/ulcerative-colitis-grade-2-3",
+    "labeled-images/lower-gi-tract/pathological-findings/ulcerative-colitis-grade-3",
+    "labeled-images/lower-gi-tract/quality-of-mucosal-views/bbps-0-1",
+    "labeled-images/lower-gi-tract/quality-of-mucosal-views/bbps-2-3",
+    "labeled-images/lower-gi-tract/quality-of-mucosal-views/impacted-stool",
+    "labeled-images/lower-gi-tract/therapeutic-interventions/dyed-lifted-polyps",
+    "labeled-images/lower-gi-tract/therapeutic-interventions/dyed-resection-margins",
+    "labeled-images/upper-gi-tract/anatomical-landmarks/pylorus",
+    "labeled-images/upper-gi-tract/anatomical-landmarks/retroflex-stomach",
+    "labeled-images/upper-gi-tract/anatomical-landmarks/z-line",
+    "labeled-images/upper-gi-tract/pathological-findings/barretts",
+    "labeled-images/upper-gi-tract/pathological-findings/barretts-short-segment",
+    "labeled-images/upper-gi-tract/pathological-findings/esophagitis-a",
+    "labeled-images/upper-gi-tract/pathological-findings/esophagitis-b-d"
+]
