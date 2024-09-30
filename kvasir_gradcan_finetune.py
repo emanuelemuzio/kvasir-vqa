@@ -1,27 +1,22 @@
-# Fine tuning a ResNet50 on hyper kvasir and kvasir inst to match the data used for Kvasir VQA
-
 import os
-import pandas as pd
-from torchvision.io import read_image
-from torch.utils.data import Dataset, DataLoader
-from torchvision import models
-from torchvision.transforms import v2
-from torchvision.models import ResNet50_Weights
+from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 import torch
 import numpy as np
 import json
 from dotenv import load_dotenv
-from torch import nn, optim
-from torchvision import models
+from torch import optim
 from torch.nn import CrossEntropyLoss
 import torch.optim as optim
 from sklearn.preprocessing import LabelEncoder
 from torcheval.metrics.functional import multiclass_accuracy
 from datetime import datetime
 import shutil
-from sklearn.utils import shuffle
 import logging
+from callback import EarlyStopper
+from util import generate_run_id
+from dataset import Kvasir, prepare_data, df_train_test_split
+from model import prepare_pretrained_model
 
 now = datetime.now()
 now = now.strftime("%Y-%m-%d")
@@ -40,184 +35,6 @@ logging.basicConfig(
 load_dotenv()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-class Kvasir(Dataset):
-    def __init__(self, path, label, code, bbox, train=False):  # Added parameter for the number of images per batch
-        self.path = path
-        self.label = label
-        self.code = code
-        self.bbox = bbox
-        # self.class_names = class_names
-        self.transform = None
-        self.train = train 
-         
-        # Define transformations
-        if self.train:
-            self.transform = v2.Compose([
-                v2.RandomResizedCrop(240),
-                v2.RandomHorizontalFlip(),
-                v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
-                v2.ToDtype(torch.float32, scale=True),
-                v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            ])
-        else:
-            self.transform = v2.Compose([
-                v2.Resize((224, 224)),
-                v2.ToDtype(torch.float32, scale=True),
-                v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            ])
-        
-        logging.info('Initialized Dataset')
-    
-    def __len__(self):
-        return len(self.code)
-
-    def __getitem__(self, idx):
-        label = self.label[idx]
-        path = self.path[idx]
-        code = self.code[idx] 
-        full_path = f"{path}/{code}.jpg"
-        img = read_image(full_path)
-        bbox = self.bbox[idx] 
-        if len(bbox) > 0:
-            img = img[:, bbox[0]:bbox[1], bbox[2]:bbox[3]]
-
-        # Apply transformations
-        transformed_image = self.transform(img)
-        
-        return transformed_image, label, path, code 
-    
-class EarlyStopper:
-    def __init__(self, patience=1, min_delta=0):
-        self.patience = patience
-        self.min_delta = min_delta
-        self.counter = 0
-        self.min_validation_loss = float('inf')
-
-    def early_stop(self, validation_loss):
-        if validation_loss < self.min_validation_loss:
-            logging.info('Patience counter reset')
-            self.min_validation_loss = validation_loss
-            self.counter = 0
-        elif validation_loss > (self.min_validation_loss + self.min_delta):
-            logging.info('Patience counter increased')
-            self.counter += 1
-            if self.counter >= self.patience:
-                logging.info('Patience counter exceeded')
-                return True
-        return False
-      
-def prepare_data():
-    rows = ['path','label','code','bbox']
-    
-    # Kvasir instrument load
-    
-    kvasir_inst_json_data = None
-    kvasir_inst_data = []
-
-    logging.info('Loading kvasir instruments')
-    
-    with open(os.getenv('KVASIR_INST_BBOX'),'r') as file:
-        kvasir_inst_json_data = json.load(file)
-        
-    kvasir_inst_img_codes = kvasir_inst_json_data.keys()
-    
-    for code in kvasir_inst_img_codes:
-        for bbox in kvasir_inst_json_data[code]['bbox']:
-            path = os.getenv('KVASIR_INST_IMG')
-            kvasir_inst_data.append(
-                [
-                    path,
-                    bbox['label'],
-                    code,
-                    [bbox['ymin'], bbox['ymax'], bbox['xmin'], bbox['xmax']]
-                ]
-            ) 
-
-    logging.info('Loaded kvasir instrument')
-
-    logging.info('Loading hyper kvasir')
-
-    # Hyper Kvasir Segmented images loading
-    # The segmented ones are only related to the polyps class
-
-    hyper_kvasir_segmented_json_data = None
-    hyper_kvasir_data = []
-    
-    with open(os.getenv('HYPER_KVASIR_SEGMENTED_BBOX'),'r') as file:
-        hyper_kvasir_segmented_json_data = json.load(file)
-        
-    hyper_kvasir_segmented_img_codes = hyper_kvasir_segmented_json_data.keys()
-    
-    for code in hyper_kvasir_segmented_img_codes:
-        for bbox in hyper_kvasir_segmented_json_data[code]['bbox']:
-            path = os.getenv('HYPER_KVASIR_SEGMENTED_IMG')
-            hyper_kvasir_data.append(
-                [
-                    path,
-                    bbox['label'],
-                    code,
-                    [bbox['ymin'], bbox['ymax'], bbox['xmin'], bbox['xmax']]
-                ]
-            ) 
-
-    # Labeled Kvasir Image question
-
-    hyper_kvasir_labeled_img_paths = []
-    
-    with open(os.getenv('HYPER_KVASIR_LABELED_IMG_PATHS'),'r') as file:
-        hyper_kvasir_labeled_img_paths = json.load(file)
-
-    for path in hyper_kvasir_labeled_img_paths:
-        label = path.split("/")
-        label = label[-1]
-        for code in os.listdir(f"{os.getenv('HYPER_KVASIR')}/{path}"):
-            hyper_kvasir_data.append(
-                [
-                    f"{os.getenv('HYPER_KVASIR')}/{path}",
-                    label,
-                    code[:-4],
-                    []
-                ]
-            )
-
-    logging.info('Loaded hyper kvasir')
-
-    data = kvasir_inst_data + hyper_kvasir_data 
-
-    df = pd.DataFrame(data, columns=rows) 
-    df = shuffle(df)
-
-    logging.info('Kvasir Df created')
-    
-    return df
-
-def prepare_pretrained_model(num_classes):
-    # # Initialize pre-trained model
-    pretrained_model = models.resnet50(weights=ResNet50_Weights.DEFAULT)
-    pretrained_model.fc = nn.Linear(pretrained_model.fc.in_features, num_classes)
-
-    # # Freeze the parameters of the pre-trained layers
-    for param in pretrained_model.parameters():
-        param.requires_grad = False
-
-    logging.info('Froze pre trained layers parameters')
-
-    # # Unfreeze the parameters of the last few layers for fine-tuning
-    for param in pretrained_model.layer4.parameters():
-        param.requires_grad = True
-
-    logging.info('Unfroze last few layers for fine tuning')
-
-    return pretrained_model
-
-def df_train_test_split(df, test_size=0.2):
-    msk = np.random.rand(len(df)) < test_size
-    train_set = df[~msk]
-    test_set = df[msk]
-
-    logging.info('Df split')
-    
-    return train_set, test_set
 
 def evaluate(model, 
             num_epochs, 
@@ -227,7 +44,7 @@ def evaluate(model,
             train_dataset, 
             val_dataset, 
             criterion, 
-            early_stopper : EarlyStopper, 
+            early_stopper, 
             encoder, 
             train_loss_ckp = [],
             train_acc_ckp = [],
@@ -358,17 +175,11 @@ def val(model, val_dataset, criterion, device, encoder):
         
         return val_loss, val_acc 
  
-def generate_run_id():
-
-    logging.info('Generating run id')
-    now = datetime.now()
-    now = now.strftime("%d%m%Y%H%M%S")
-    return now
-
 if __name__ == '__main__':
     run_id = generate_run_id()
 
     dataset = prepare_data()    
+
     class_names = dataset.label.unique()
     
     enc = LabelEncoder()
@@ -397,15 +208,16 @@ if __name__ == '__main__':
     
     # # Train run hyper parameters
     # Define loss function (Binary Cross Entropy Loss in this case, for multi-label classification)
+
     criterion = CrossEntropyLoss()
-    lr = 0.001
+    lr = 0.002
     momentum = 0.9
     # Define optimizer
     optimizer = optim.SGD(pretrained_model.parameters(), lr=lr, momentum=momentum)
-    early_stopper = EarlyStopper(patience=5, min_delta=0.025)
+    early_stopper = EarlyStopper(patience=10, min_delta=0.03)
     # Training loop
-    num_epochs = 200
-    batch_size = 25
+    num_epochs = 500
+    batch_size = 16
     
     pretrained_model.to(device)
 
