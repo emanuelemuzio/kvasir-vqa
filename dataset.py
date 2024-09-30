@@ -17,9 +17,11 @@ def retrieve_dataset() -> None:
     dataframe = dataset['raw'].select_columns(['source', 'question', 'answer', 'img_id']).to_pandas()
     
     if not os.path.exists(f"{os.getenv('KVASIR_VQA_METADATA')}/metadata.csv"):
+        print('[LOG] Retrieving metadata.csv for Kvasir VQA')
         dataframe.to_csv(f"{os.getenv('KVASIR_VQA_METADATA')}/metadata.csv", index=False)
         
     if not os.path.exists(f"{os.getenv('KVASIR_VQA_DATA')}"):
+        print('[LOG] Retrieving Kvasir VQA data')
         os.makedirs(f"{os.getenv('KVASIR_VQA_DATA')}", exist_ok=True)
         for i, row in dataframe.groupby('img_id').nth(0).iterrows(): # for images
             dataset['raw'][i]['image'].save(f"{os.getenv('KVASIR_VQA_DATA')}/{row['img_id']}.jpg")

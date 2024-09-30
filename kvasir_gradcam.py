@@ -20,6 +20,22 @@ from sklearn.preprocessing import LabelEncoder
 from torcheval.metrics.functional import multiclass_accuracy
 from datetime import datetime
 import shutil
+from sklearn.utils import shuffle
+import logging
+
+now = datetime.now()
+now = now.strftime("%Y-%m-%d")
+
+logging.basicConfig(
+    filename=f"logs/{now}.log",
+    encoding="utf-8",
+    filemode="a",
+    format="{asctime} - {levelname} - {message}",
+    style="{",
+    datefmt="%Y-%m-%d %H:%M",
+    force=True,
+    level=logging.INFO
+)
 
 load_dotenv()
 
@@ -49,6 +65,8 @@ class Kvasir(Dataset):
                 v2.ToDtype(torch.float32, scale=True),
                 v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ])
+        
+        logging.info('Initialized Dataset')
     
     def __len__(self):
         return len(self.code)
@@ -77,11 +95,14 @@ class EarlyStopper:
 
     def early_stop(self, validation_loss):
         if validation_loss < self.min_validation_loss:
+            logging.info('Patience counter reset')
             self.min_validation_loss = validation_loss
             self.counter = 0
         elif validation_loss > (self.min_validation_loss + self.min_delta):
+            logging.info('Patience counter increased')
             self.counter += 1
             if self.counter >= self.patience:
+                logging.info('Patience counter exceeded')
                 return True
         return False
       
@@ -92,6 +113,8 @@ def prepare_data():
     
     kvasir_inst_json_data = None
     kvasir_inst_data = []
+
+    logging.info('Loading kvasir instruments')
     
     with open(os.getenv('KVASIR_INST_BBOX'),'r') as file:
         kvasir_inst_json_data = json.load(file)
@@ -100,9 +123,6 @@ def prepare_data():
     
     for code in kvasir_inst_img_codes:
         for bbox in kvasir_inst_json_data[code]['bbox']:
-            # im = cv.imread(f"{os.getenv('KVASIR_INST_IMG')}/{code}.jpg")
-            # im = im[bbox['ymin']:bbox['ymax'], bbox['xmin']:bbox['xmax']]
-            # im = cv.cvtColor(im, cv.COLOR_BGR2RGB)
             path = os.getenv('KVASIR_INST_IMG')
             kvasir_inst_data.append(
                 [
@@ -112,6 +132,10 @@ def prepare_data():
                     [bbox['ymin'], bbox['ymax'], bbox['xmin'], bbox['xmax']]
                 ]
             ) 
+
+    logging.info('Loaded kvasir instrument')
+
+    logging.info('Loading hyper kvasir')
 
     # Hyper Kvasir Segmented images loading
     # The segmented ones are only related to the polyps class
@@ -126,9 +150,6 @@ def prepare_data():
     
     for code in hyper_kvasir_segmented_img_codes:
         for bbox in hyper_kvasir_segmented_json_data[code]['bbox']:
-            # im = cv.imread(f"{os.getenv('KVASIR_INST_IMG')}/{code}.jpg")
-            # im = im[bbox['ymin']:bbox['ymax'], bbox['xmin']:bbox['xmax']]
-            # im = cv.cvtColor(im, cv.COLOR_BGR2RGB)
             path = os.getenv('HYPER_KVASIR_SEGMENTED_IMG')
             hyper_kvasir_data.append(
                 [
@@ -159,9 +180,14 @@ def prepare_data():
                 ]
             )
 
+    logging.info('Loaded hyper kvasir')
+
     data = kvasir_inst_data + hyper_kvasir_data 
 
     df = pd.DataFrame(data, columns=rows) 
+    df = shuffle(df)
+
+    logging.info('Kvasir Df created')
     
     return df
 
@@ -174,9 +200,13 @@ def prepare_pretrained_model(num_classes):
     for param in pretrained_model.parameters():
         param.requires_grad = False
 
+    logging.info('Froze pre trained layers parameters')
+
     # # Unfreeze the parameters of the last few layers for fine-tuning
     for param in pretrained_model.layer4.parameters():
         param.requires_grad = True
+
+    logging.info('Unfroze last few layers for fine tuning')
 
     return pretrained_model
 
@@ -184,6 +214,9 @@ def df_train_test_split(df, test_size=0.2):
     msk = np.random.rand(len(df)) < test_size
     train_set = df[~msk]
     test_set = df[msk]
+
+    logging.info('Df split')
+    
     return train_set, test_set
 
 def evaluate(model, 
@@ -194,7 +227,7 @@ def evaluate(model,
             train_dataset, 
             val_dataset, 
             criterion, 
-            early_stopper, 
+            early_stopper : EarlyStopper, 
             encoder, 
             train_loss_ckp = [],
             train_acc_ckp = [],
@@ -202,7 +235,11 @@ def evaluate(model,
             val_acc_ckp = [],
             best_acc_ckp = - np.inf,
             start_epoch = 1,
-            run_id='test'):
+            run_id='test',
+            logging=None):
+    
+    logging.info('Starting model evaluation')
+
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
     
@@ -215,11 +252,13 @@ def evaluate(model,
     best_weights = None
 
     if train_loss_ckp is not None:
+        logging.info(f'Loading {run_id} checkpoint')
         train_loss += train_loss_ckp
         train_acc += train_acc_ckp
         val_loss += val_loss_ckp
         val_acc += val_acc_ckp
         best_acc = best_acc_ckp
+        early_stopper.min_validation_loss = min(val_loss)
 
     # Ciclo di addestramento
 
@@ -233,7 +272,9 @@ def evaluate(model,
         val_loss.append(epoch_val_loss)
         val_acc.append(epoch_val_acc)
         
-        print(f"\nEpoch [{epoch}/{num_epochs}] Train Loss: {epoch_train_loss:.4f}  Validation Loss: {epoch_val_loss:.4f}, Validation Accuracy: {epoch_val_acc*100:.2f}%")
+        logging.info(f"Epoch [{epoch}/{num_epochs}] Train Loss: {epoch_train_loss:.4f}  Validation Loss: {epoch_val_loss:.4f}, Validation Accuracy: {epoch_val_acc*100:.2f}%")
+
+        print(f"Epoch [{epoch}/{num_epochs}] Train Loss: {epoch_train_loss:.4f}  Validation Loss: {epoch_val_loss:.4f}, Validation Accuracy: {epoch_val_acc*100:.2f}%")
         
         if epoch_val_acc > best_acc:
             best_acc = epoch_val_acc
@@ -249,8 +290,11 @@ def evaluate(model,
                 'best_acc' : best_acc,
                 'run_id' : run_id
             }, os.getenv('KVASIR_GRADCAM_CHECKPOINT')) 
+
+            logging.info('Checkpoint reached')
             
-        if early_stopper.early_stop(epoch_val_loss):             
+        if early_stopper.early_stop(epoch_val_loss):
+            logging.info('Early stop activating')
             break
             
     return train_loss, train_acc, val_loss, val_acc, best_acc, best_weights
@@ -315,35 +359,52 @@ def val(model, val_dataset, criterion, device, encoder):
         return val_loss, val_acc 
  
 def generate_run_id():
+
+    logging.info('Generating run id')
     now = datetime.now()
     now = now.strftime("%d%m%Y%H%M%S")
     return now
 
 if __name__ == '__main__':
-
     run_id = generate_run_id()
+
     dataset = prepare_data()    
     class_names = dataset.label.unique()
+    
     enc = LabelEncoder()
     enc.fit(class_names)
+    
     train_set, val_set = df_train_test_split(dataset, 0.2)
-    train_dataset = Kvasir(train_set['path'].to_numpy(), train_set['label'].to_numpy(), train_set['code'].to_numpy(), train_set['bbox'].to_numpy(), train=True)
-    val_dataset = Kvasir(val_set['path'].to_numpy(), val_set['label'].to_numpy(), val_set['code'].to_numpy(), val_set['bbox'].to_numpy(), train=False)
+    
+    train_dataset = Kvasir(
+        train_set['path'].to_numpy(), 
+        train_set['label'].to_numpy(), 
+        train_set['code'].to_numpy(), 
+        train_set['bbox'].to_numpy(), 
+        train=True)
+    
+    val_dataset = Kvasir(val_set['path'].to_numpy(), 
+                         val_set['label'].to_numpy(), 
+                         val_set['code'].to_numpy(), 
+                         val_set['bbox'].to_numpy(), 
+                         train=False)
 
     num_classes = len(class_names)
 
     pretrained_model = prepare_pretrained_model(num_classes)
+
+    logging.info('Declaring hyper parameters')
     
     # # Train run hyper parameters
     # Define loss function (Binary Cross Entropy Loss in this case, for multi-label classification)
     criterion = CrossEntropyLoss()
     lr = 0.001
-    momentum = 0.8
+    momentum = 0.9
     # Define optimizer
     optimizer = optim.SGD(pretrained_model.parameters(), lr=lr, momentum=momentum)
-    early_stopper = EarlyStopper(patience=3, min_delta=0.5)
+    early_stopper = EarlyStopper(patience=5, min_delta=0.025)
     # Training loop
-    num_epochs = 100
+    num_epochs = 200
     batch_size = 25
     
     pretrained_model.to(device)
@@ -368,7 +429,9 @@ if __name__ == '__main__':
         best_acc_ckp = checkpoint['best_acc']
         run_id = checkpoint['run_id']
         run_path = f"{os.getenv('KVASIR_GRADCAM_RUNS')}/{run_id}"
+        logging.info(f'Loaded run {run_id} checkpoint')
     else:
+        logging.info(f'New run: {run_id}')
         run_path = f"{os.getenv('KVASIR_GRADCAM_RUNS')}/{run_id}"
         os.mkdir(run_path)
 
@@ -389,7 +452,10 @@ if __name__ == '__main__':
         val_acc_ckp = val_acc_ckp,
         best_acc_ckp = best_acc_ckp,
         start_epoch = start_epoch,
-        run_id=run_id)
+        run_id=run_id,
+        logging=logging)
+    
+    logging.info(f'Evaluation ended in {len(train_loss)} epochs')
     
     torch.save(best_weights, f"{run_path}/model.pt")
 
@@ -404,7 +470,8 @@ if __name__ == '__main__':
             'train_acc' : train_acc,
             'val_loss' : val_loss,
             'val_acc' : val_acc,
-            'best_acc' : best_acc
+            'best_acc' : best_acc,
+            'run_id' : run_id
         }
         json.dump(config, f)
 
@@ -422,4 +489,11 @@ if __name__ == '__main__':
                 best_run = run
         if os.path.exists(f"{os.getenv('KVASIR_GRADCAM_MODEL')}"):
             os.remove(f"{os.getenv('KVASIR_GRADCAM_MODEL')}")
-        shutil.copyfile(f"{os.getenv('KVASIR_GRADCAM_RUNS')}/{run}/model.pt", f"{os.getenv('KVASIR_GRADCAM_MODEL')}")
+        
+        shutil.copyfile(f"{os.getenv('KVASIR_GRADCAM_RUNS')}/{run}/model.pt", 
+                        f"{os.getenv('KVASIR_GRADCAM_MODEL')}")
+        
+        shutil.copyfile(f"{os.getenv('KVASIR_GRADCAM_RUNS')}/{run}/run.json", 
+                        f"{os.getenv('KVASIR_GRADCAM_RUN')}")
+        
+        logging.info(f'New best run: {best_run}')
