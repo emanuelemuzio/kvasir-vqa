@@ -2,9 +2,8 @@
 *.jpg
 *.png
 /kvasir_vqa
-/model/kvasir_gradcam/checkpoint.pt
 /model/kvasir_gradcam/runs/
-/model/kvasir_gradcam/runs/*.pt
+*.pt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
