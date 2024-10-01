@@ -8,14 +8,13 @@ from dotenv import load_dotenv
 from torch import optim
 from torch.nn import CrossEntropyLoss
 import torch.optim as optim
-from sklearn.preprocessing import LabelEncoder
 from torcheval.metrics.functional import multiclass_accuracy
 from datetime import datetime
 import shutil
 import logging
 from callback import EarlyStopper
 from util import generate_run_id
-from dataset import Kvasir, prepare_data, df_train_test_split
+from dataset import Kvasir, prepare_data, df_train_test_split, kvasir_gradcam_class_names, label2id_list
 from model import prepare_pretrained_model
 
 now = datetime.now()
@@ -45,7 +44,6 @@ def evaluate(model,
             val_dataset, 
             criterion, 
             early_stopper, 
-            encoder, 
             train_loss_ckp = [],
             train_acc_ckp = [],
             val_loss_ckp = [],
@@ -81,11 +79,11 @@ def evaluate(model,
 
     for epoch in tqdm(range(start_epoch, num_epochs + 1)):
         torch.cuda.empty_cache()
-        epoch_train_loss, epoch_train_acc = train(model, train_dataloader, criterion, optimizer, device, encoder)
+        epoch_train_loss, epoch_train_acc = train(model, train_dataloader, criterion, optimizer, device)
         train_loss.append(epoch_train_loss)
         train_acc.append(epoch_train_acc)
         
-        epoch_val_loss, epoch_val_acc = val(model, val_dataloader, criterion, device, encoder)
+        epoch_val_loss, epoch_val_acc = val(model, val_dataloader, criterion, device)
         val_loss.append(epoch_val_loss)
         val_acc.append(epoch_val_acc)
         
@@ -116,7 +114,7 @@ def evaluate(model,
             
     return train_loss, train_acc, val_loss, val_acc, best_acc, best_weights
         
-def train(model, train_dataset, criterion, optimizer, device, encoder):
+def train(model, train_dataset, criterion, optimizer, device):
     model.train()
 
     train_loss = 0.0
@@ -124,8 +122,8 @@ def train(model, train_dataset, criterion, optimizer, device, encoder):
 
     for i, (img, label, __, _) in enumerate(train_dataset):
 
-        img = img.unsqueeze(0).to(device)[0]
-        label = torch.tensor(encoder.transform(label)).to(device)
+        img = img.to(device)
+        label = torch.tensor(label2id_list(label)).to(device)
 
         optimizer.zero_grad()
 
@@ -146,7 +144,7 @@ def train(model, train_dataset, criterion, optimizer, device, encoder):
 
     return train_loss, train_acc
 
-def val(model, val_dataset, criterion, device, encoder):
+def val(model, val_dataset, criterion, device):
     # Evaluate the model on the validation set
     model.eval()
     val_loss = 0.0
@@ -155,7 +153,7 @@ def val(model, val_dataset, criterion, device, encoder):
     with torch.no_grad():
         for i, (img, label, _, _) in enumerate(val_dataset):
             img = img.unsqueeze(0).to(device)[0]
-            label = torch.tensor(encoder.transform(label)).to(device)
+            label = torch.tensor(label2id_list(label)).to(device)
 
             optimizer.zero_grad()
 
@@ -180,12 +178,10 @@ if __name__ == '__main__':
 
     dataset = prepare_data()    
 
-    class_names = dataset.label.unique()
-    
-    enc = LabelEncoder()
-    enc.fit(class_names)
+    class_names = kvasir_gradcam_class_names()
     
     train_set, val_set = df_train_test_split(dataset, 0.2)
+    # val_set, test_set = df_train_test_split(val_set, 0.5)
     
     train_dataset = Kvasir(
         train_set['path'].to_numpy(), 
@@ -194,11 +190,19 @@ if __name__ == '__main__':
         train_set['bbox'].to_numpy(), 
         train=True)
     
-    val_dataset = Kvasir(val_set['path'].to_numpy(), 
-                         val_set['label'].to_numpy(), 
-                         val_set['code'].to_numpy(), 
-                         val_set['bbox'].to_numpy(), 
-                         train=False)
+    val_dataset = Kvasir(
+        val_set['path'].to_numpy(), 
+        val_set['label'].to_numpy(), 
+        val_set['code'].to_numpy(), 
+        val_set['bbox'].to_numpy(), 
+        train=False)
+    
+    # test_dataset = Kvasir(
+    #     test_set['path'].to_numpy(), 
+    #     test_set['label'].to_numpy(), 
+    #     test_set['code'].to_numpy(), 
+    #     test_set['bbox'].to_numpy(), 
+    #     train=False)
 
     num_classes = len(class_names)
 
@@ -210,13 +214,15 @@ if __name__ == '__main__':
     # Define loss function (Binary Cross Entropy Loss in this case, for multi-label classification)
 
     criterion = CrossEntropyLoss()
-    lr = 0.002
+    lr = 0.001
     momentum = 0.9
+    
     # Define optimizer
     optimizer = optim.SGD(pretrained_model.parameters(), lr=lr, momentum=momentum)
-    early_stopper = EarlyStopper(patience=10, min_delta=0.03)
+    early_stopper = EarlyStopper(patience=5, min_delta=0.005)
+    
     # Training loop
-    num_epochs = 500
+    num_epochs = 50
     batch_size = 16
     
     pretrained_model.to(device)
@@ -257,7 +263,6 @@ if __name__ == '__main__':
         val_dataset=val_dataset, 
         criterion=criterion, 
         early_stopper=early_stopper, 
-        encoder=enc,
         train_loss_ckp = train_loss_ckp,
         train_acc_ckp = train_acc_ckp,
         val_loss_ckp = val_loss_ckp,
@@ -295,10 +300,11 @@ if __name__ == '__main__':
     if len(runs) > 0:
         runs_best_acc = 0
         for run in runs:
-            with open(f"{os.getenv('KVASIR_GRADCAM_RUNS')}/{run}/run.json", 'r') as f:
-                data = json.load(f)
-                runs_best_acc = data['best_acc'] if data['best_acc'] > runs_best_acc else runs_best_acc
-                best_run = run
+            if os.path.exists(f"{os.getenv('KVASIR_GRADCAM_RUNS')}/{run}/run.json"):
+                with open(f"{os.getenv('KVASIR_GRADCAM_RUNS')}/{run}/run.json", 'r') as f:
+                    data = json.load(f)
+                    runs_best_acc = data['best_acc'] if data['best_acc'] > runs_best_acc else runs_best_acc
+                    best_run = run
         if os.path.exists(f"{os.getenv('KVASIR_GRADCAM_MODEL')}"):
             os.remove(f"{os.getenv('KVASIR_GRADCAM_MODEL')}")
         

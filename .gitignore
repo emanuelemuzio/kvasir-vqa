@@ -2,7 +2,7 @@
 *.jpg
 *.png
 /kvasir_vqa
-/model/kvasir_gradcam/runs/
+/model/kvasir_gradcam/runs/*
 *.pt
 
 # Byte-compiled / optimized / DLL files

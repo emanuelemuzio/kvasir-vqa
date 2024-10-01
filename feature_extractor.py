@@ -6,13 +6,14 @@ from PIL import Image
 import torchvision
 from pytorch_grad_cam import GradCAM 
 from pytorch_grad_cam.utils.image import show_cam_on_image
-from kvasir_gradcan_finetune import prepare_data, prepare_pretrained_model
+from dataset import prepare_data, kvasir_gradcam_class_names 
 from pytorch_grad_cam.utils.image import (
     show_cam_on_image, deprocess_image, preprocess_image
 )
 import cv2 as cv
 from pytorch_grad_cam import GuidedBackpropReLUModel
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
+from model import prepare_pretrained_model
 
 load_dotenv()
 
@@ -27,7 +28,7 @@ def get_img(path: str):
 
 if __name__ == '__main__':
     dataset = prepare_data()
-    class_names = dataset.label.unique()
+    class_names = kvasir_gradcam_class_names()
     num_classes = len(class_names)
 
     model = prepare_pretrained_model(num_classes=num_classes)
@@ -35,7 +36,7 @@ if __name__ == '__main__':
     model.load_state_dict(torch.load(os.getenv('KVASIR_GRADCAM_MODEL')))
     target_layers = [model.layer4]
 
-    test_img_path = "./data/hyper-kvasir/labeled-images/lower-gi-tract/pathological-findings/hemorrhoids/91ffae20-72a8-4864-a4bc-6edc085f8b54.jpg" 
+    test_img_path = "./data/hyper-kvasir/labeled-images/lower-gi-tract/pathological-findings/polyps/0d486f49-7a49-4dc4-89fc-48b381307320.jpg" 
 
     rgb_img = cv.imread(test_img_path, 1)[:, :, ::-1]
     rgb_img = np.float32(rgb_img) / 255
@@ -43,9 +44,11 @@ if __name__ == '__main__':
                                     mean=[0.485, 0.456, 0.406],
                                     std=[0.229, 0.224, 0.225]).to(device)
     
-    targets = [ClassifierOutputTarget(np.where(class_names == 'hemorrhoids')[0][0])]
+    targets = [ClassifierOutputTarget(class_names.index('polyp'))]
+    # targets = None
 
     output = model(input_tensor)
+    class_ = class_names[torch.argmax(output)]
 
     with GradCAM(model=model, target_layers=target_layers) as cam:
         cam.batch_size = 32

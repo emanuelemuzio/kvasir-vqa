@@ -83,98 +83,115 @@ def format_bbox(x):
     
 # Prepare a Hyper-Kvasir df joint with Kvasir Instrument
          
+def generate_kvasir_gradcam_classes_json(df : pd.DataFrame):
+    class_names = df.label.unique()
+
+    classes = {}
+
+    for i in range(len(class_names)):
+        classes[class_names[i]] = i
+
+    with open(os.getenv('KVASIR_GRADCAM_CLASSES'), 'w') as f:
+        json.dump(classes, f)
+
 def prepare_data():
     if os.path.exists(os.getenv('KVASIR_GRADCAM_CSV')):
         df = pd.read_csv(os.getenv('KVASIR_GRADCAM_CSV'))
 
         df['bbox'] = df['bbox'].apply(format_bbox)
 
-        return df
+    else:
 
-    rows = ['path','label','code','bbox']
-    
-    # Kvasir instrument load
-    
-    kvasir_inst_json_data = None
-    kvasir_inst_data = []
-
-    logging.info('Loading kvasir instruments')
-    
-    with open(os.getenv('KVASIR_INST_BBOX'),'r') as file:
-        kvasir_inst_json_data = json.load(file)
+        rows = ['path','label','code','bbox']
         
-    kvasir_inst_img_codes = kvasir_inst_json_data.keys()
-    
-    for code in kvasir_inst_img_codes:
-        for bbox in kvasir_inst_json_data[code]['bbox']:
-            path = os.getenv('KVASIR_INST_IMG')
-            kvasir_inst_data.append(
-                [
-                    path,
-                    bbox['label'],
-                    code,
-                    [bbox['ymin'], bbox['ymax'], bbox['xmin'], bbox['xmax']]
-                ]
-            ) 
-
-    logging.info('Loaded kvasir instrument')
-
-    logging.info('Loading hyper kvasir')
-
-    # Hyper Kvasir Segmented images loading
-    # The segmented ones are only related to the polyps class
-
-    hyper_kvasir_segmented_json_data = None
-    hyper_kvasir_data = []
-    
-    with open(os.getenv('HYPER_KVASIR_SEGMENTED_BBOX'),'r') as file:
-        hyper_kvasir_segmented_json_data = json.load(file)
+        # Kvasir instrument load
         
-    hyper_kvasir_segmented_img_codes = hyper_kvasir_segmented_json_data.keys()
+        kvasir_inst_json_data = None
+        kvasir_inst_data = []
+
+        logging.info('Loading kvasir instruments')
+        
+        with open(os.getenv('KVASIR_INST_BBOX'),'r') as file:
+            kvasir_inst_json_data = json.load(file)
+            
+        kvasir_inst_img_codes = kvasir_inst_json_data.keys()
+        
+        for code in kvasir_inst_img_codes:
+            for bbox in kvasir_inst_json_data[code]['bbox']:
+                path = os.getenv('KVASIR_INST_IMG')
+                kvasir_inst_data.append(
+                    [
+                        path,
+                        bbox['label'],
+                        code,
+                        [bbox['ymin'], bbox['ymax'], bbox['xmin'], bbox['xmax']]
+                    ]
+                ) 
+
+        logging.info('Loaded kvasir instrument')
+
+        logging.info('Loading hyper kvasir')
+
+        # Hyper Kvasir Segmented images loading
+        # The segmented ones are only related to the polyps class
+
+        hyper_kvasir_segmented_json_data = None
+        hyper_kvasir_data = []
+        
+        with open(os.getenv('HYPER_KVASIR_SEGMENTED_BBOX'),'r') as file:
+            hyper_kvasir_segmented_json_data = json.load(file)
+            
+        hyper_kvasir_segmented_img_codes = hyper_kvasir_segmented_json_data.keys()
+        
+        for code in hyper_kvasir_segmented_img_codes:
+            for bbox in hyper_kvasir_segmented_json_data[code]['bbox']:
+                path = os.getenv('HYPER_KVASIR_SEGMENTED_IMG')
+                hyper_kvasir_data.append(
+                    [
+                        path,
+                        bbox['label'],
+                        code,
+                        [bbox['ymin'], bbox['ymax'], bbox['xmin'], bbox['xmax']]
+                    ]
+                ) 
+
+        # Labeled Kvasir Image question
+
+        hyper_kvasir_labeled_img_paths = []
+        
+        # with open(os.getenv('HYPER_KVASIR_LABELED_IMG_PATHS'),'r') as file:
+        #     hyper_kvasir_labeled_img_paths = json.load(file)
+
+        # for path in hyper_kvasir_labeled_img_paths:
+        #     label = path.split("/")
+        #     label = label[-1]
+        #     for code in os.listdir(f"{os.getenv('HYPER_KVASIR')}/{path}"):
+        #         hyper_kvasir_data.append(
+        #             [
+        #                 f"{os.getenv('HYPER_KVASIR')}/{path}",
+        #                 label,
+        #                 code[:-4],
+        #                 []
+        #             ]
+        #         )
+
+        logging.info('Loaded hyper kvasir')
+
+        data = kvasir_inst_data + hyper_kvasir_data 
+
+        df = pd.DataFrame(data, columns=rows) 
+        df = shuffle(df)
+
+        df.to_csv(os.getenv('KVASIR_GRADCAM_CSV'), index=False)
+
+        logging.info('Kvasir Df created')
+
+        if not os.path.exists(os.getenv('KVASIR_GRADCAM_CLASSES')):
+            generate_kvasir_gradcam_classes_json(df)
     
-    for code in hyper_kvasir_segmented_img_codes:
-        for bbox in hyper_kvasir_segmented_json_data[code]['bbox']:
-            path = os.getenv('HYPER_KVASIR_SEGMENTED_IMG')
-            hyper_kvasir_data.append(
-                [
-                    path,
-                    bbox['label'],
-                    code,
-                    [bbox['ymin'], bbox['ymax'], bbox['xmin'], bbox['xmax']]
-                ]
-            ) 
+    if not os.path.exists(os.getenv('KVASIR_GRADCAM_CLASSES')):
+        generate_kvasir_gradcam_classes_json(df)
 
-    # Labeled Kvasir Image question
-
-    hyper_kvasir_labeled_img_paths = []
-    
-    with open(os.getenv('HYPER_KVASIR_LABELED_IMG_PATHS'),'r') as file:
-        hyper_kvasir_labeled_img_paths = json.load(file)
-
-    for path in hyper_kvasir_labeled_img_paths:
-        label = path.split("/")
-        label = label[-1]
-        for code in os.listdir(f"{os.getenv('HYPER_KVASIR')}/{path}"):
-            hyper_kvasir_data.append(
-                [
-                    f"{os.getenv('HYPER_KVASIR')}/{path}",
-                    label,
-                    code[:-4],
-                    []
-                ]
-            )
-
-    logging.info('Loaded hyper kvasir')
-
-    data = kvasir_inst_data + hyper_kvasir_data 
-
-    df = pd.DataFrame(data, columns=rows) 
-    df = shuffle(df)
-
-    df.to_csv(os.getenv('KVASIR_GRADCAM_CSV'), index=False)
-
-    logging.info('Kvasir Df created')
-    
     return df
 
 def df_train_test_split(df, test_size=0.2):
@@ -207,6 +224,31 @@ def retrieve_dataset() -> None:
         for i, row in dataframe.groupby('img_id').nth(0).iterrows(): # for images
             dataset['raw'][i]['image'].save(f"{os.getenv('KVASIR_VQA_DATA')}/{row['img_id']}.jpg")
             
+def kvasir_gradcam_classes():
+    f = open(os.getenv('KVASIR_GRADCAM_CLASSES'))
+    data = json.load(f)
+
+    return data
+
+def kvasir_gradcam_class_names():
+    classes = kvasir_gradcam_classes()
+    return list(classes.keys())
+
+def id2label(idx : int) -> str:
+    classes = kvasir_gradcam_classes()
+    label = classes.keys()[classes.values().index(idx)]
+    return label
+
+def id2label_list(idx_list : list) -> list:
+    return list(map(id2label, idx_list))
+
+def label2id(label : str) -> str:
+    classes = kvasir_gradcam_classes()
+    return classes[label]
+
+def label2id_list(label_list : list) -> list:
+    return list(map(label2id, label_list))
+
 def main():
     retrieve_dataset()
     
