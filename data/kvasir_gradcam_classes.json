@@ -1,1 +1,27 @@
-{"polyp": 0, "instrument": 1}
+{
+    "retroflex-rectum": 0,
+    "polyps": 1,
+    "retroflex-stomach": 2,
+    "dyed-lifted-polyps": 3,
+    "dyed-resection-margins": 4,
+    "polyp": 5,
+    "bbps-0-1": 6,
+    "esophagitis-b-d": 7,
+    "pylorus": 8,
+    "z-line": 9,
+    "bbps-2-3": 10,
+    "cecum": 11,
+    "instrument": 12,
+    "impacted-stool": 13,
+    "ulcerative-colitis-grade-3": 14,
+    "ulcerative-colitis-grade-2": 15,
+    "esophagitis-a": 16,
+    "ulcerative-colitis-grade-1": 17,
+    "barretts": 18,
+    "ulcerative-colitis-grade-2-3": 19,
+    "ulcerative-colitis-grade-0-1": 20,
+    "ileum": 21,
+    "barretts-short-segment": 22,
+    "ulcerative-colitis-grade-1-2": 23,
+    "hemorrhoids": 24
+}

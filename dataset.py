@@ -79,7 +79,7 @@ def format_bbox(x):
     if x == '[]':
         return []
     else:
-        return list(map(int, x.replace('[','').replace(']','').split(',')))
+        return list(map(int, x.split(',')))
     
 # Prepare a Hyper-Kvasir df joint with Kvasir Instrument
          
@@ -124,7 +124,7 @@ def prepare_data():
                         path,
                         bbox['label'],
                         code,
-                        [bbox['ymin'], bbox['ymax'], bbox['xmin'], bbox['xmax']]
+                        f"{bbox['ymin']}, {bbox['ymax']}, {bbox['xmin']}, {bbox['xmax']}"
                     ]
                 ) 
 
@@ -151,7 +151,7 @@ def prepare_data():
                         path,
                         bbox['label'],
                         code,
-                        [bbox['ymin'], bbox['ymax'], bbox['xmin'], bbox['xmax']]
+                        f"{bbox['ymin']}, {bbox['ymax']}, {bbox['xmin']}, {bbox['xmax']}"
                     ]
                 ) 
 
@@ -159,21 +159,21 @@ def prepare_data():
 
         hyper_kvasir_labeled_img_paths = []
         
-        # with open(os.getenv('HYPER_KVASIR_LABELED_IMG_PATHS'),'r') as file:
-        #     hyper_kvasir_labeled_img_paths = json.load(file)
+        with open(os.getenv('HYPER_KVASIR_LABELED_IMG_PATHS'),'r') as file:
+            hyper_kvasir_labeled_img_paths = json.load(file)
 
-        # for path in hyper_kvasir_labeled_img_paths:
-        #     label = path.split("/")
-        #     label = label[-1]
-        #     for code in os.listdir(f"{os.getenv('HYPER_KVASIR')}/{path}"):
-        #         hyper_kvasir_data.append(
-        #             [
-        #                 f"{os.getenv('HYPER_KVASIR')}/{path}",
-        #                 label,
-        #                 code[:-4],
-        #                 []
-        #             ]
-        #         )
+        for path in hyper_kvasir_labeled_img_paths:
+            label = path.split("/")
+            label = label[-1]
+            for code in os.listdir(f"{os.getenv('HYPER_KVASIR')}/{path}"):
+                hyper_kvasir_data.append(
+                    [
+                        f"{os.getenv('HYPER_KVASIR')}/{path}",
+                        label,
+                        code[:-4],
+                        []
+                    ]
+                )
 
         logging.info('Loaded hyper kvasir')
 

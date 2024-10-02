@@ -214,16 +214,16 @@ if __name__ == '__main__':
     # Define loss function (Binary Cross Entropy Loss in this case, for multi-label classification)
 
     criterion = CrossEntropyLoss()
-    lr = 0.001
+    lr = 1e-5
     momentum = 0.9
     
     # Define optimizer
     optimizer = optim.SGD(pretrained_model.parameters(), lr=lr, momentum=momentum)
-    early_stopper = EarlyStopper(patience=5, min_delta=0.005)
+    early_stopper = EarlyStopper(patience=3, min_delta=0.01)
     
     # Training loop
     num_epochs = 50
-    batch_size = 16
+    batch_size = 24
     
     pretrained_model.to(device)
 

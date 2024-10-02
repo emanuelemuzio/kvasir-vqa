@@ -1,5 +1,4 @@
 from torchvision import models
-from torchvision.models import ResNet152_Weights
 from dotenv import load_dotenv
 from torch import nn
 from torchvision import models
@@ -24,18 +23,18 @@ load_dotenv()
 
 def prepare_pretrained_model(num_classes):
     # # Initialize pre-trained model
-    pretrained_model = models.resnet152(weights=ResNet152_Weights.DEFAULT)
+    pretrained_model = models.resnet152()
     pretrained_model.fc = nn.Linear(pretrained_model.fc.in_features, num_classes)
 
-    # # Freeze the parameters of the pre-trained layers
+    # Tuning the whole Net
     for param in pretrained_model.parameters():
-        param.requires_grad = False
+        param.requires_grad = True
 
     logging.info('Froze pre trained layers parameters')
 
     # # Unfreeze the parameters of the last few layers for fine-tuning
-    for param in pretrained_model.layer4.parameters():
-        param.requires_grad = True
+    # for param in pretrained_model.layer4.parameters():
+    #     param.requires_grad = True
 
     logging.info('Unfroze last few layers for fine tuning')
 
