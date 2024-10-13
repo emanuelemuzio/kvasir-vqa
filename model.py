@@ -39,3 +39,10 @@ def prepare_pretrained_model(num_classes):
     logging.info('Unfroze last few layers for fine tuning')
 
     return pretrained_model
+
+activation = {}
+
+def get_activation(name):
+    def hook(model, input, output):
+        activation[name] = output.detach()
+    return hook

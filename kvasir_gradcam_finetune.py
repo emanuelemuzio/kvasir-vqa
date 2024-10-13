@@ -16,6 +16,8 @@ from callback import EarlyStopper
 from util import generate_run_id
 from dataset import Kvasir, prepare_data, df_train_test_split, kvasir_gradcam_class_names, label2id_list
 from model import prepare_pretrained_model
+from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR
+import argparse
 
 now = datetime.now()
 now = now.strftime("%Y-%m-%d")
@@ -39,6 +41,8 @@ def evaluate(model,
             num_epochs, 
             batch_size, 
             optimizer, 
+            scheduler,
+            scheduler_name,
             device, 
             train_dataset, 
             val_dataset, 
@@ -79,11 +83,11 @@ def evaluate(model,
 
     for epoch in tqdm(range(start_epoch, num_epochs + 1)):
         torch.cuda.empty_cache()
-        epoch_train_loss, epoch_train_acc = train(model, train_dataloader, criterion, optimizer, device)
+        epoch_train_loss, epoch_train_acc = train(model, train_dataloader, criterion, optimizer, device, scheduler, scheduler_name)
         train_loss.append(epoch_train_loss)
         train_acc.append(epoch_train_acc)
         
-        epoch_val_loss, epoch_val_acc = val(model, val_dataloader, criterion, device)
+        epoch_val_loss, epoch_val_acc = val(model, val_dataloader, criterion, device, scheduler, scheduler_name)
         val_loss.append(epoch_val_loss)
         val_acc.append(epoch_val_acc)
         
@@ -114,7 +118,7 @@ def evaluate(model,
             
     return train_loss, train_acc, val_loss, val_acc, best_acc, best_weights
         
-def train(model, train_dataset, criterion, optimizer, device):
+def train(model, train_dataset, criterion, optimizer, device, scheduler, scheduler_name):
     model.train()
 
     train_loss = 0.0
@@ -139,12 +143,15 @@ def train(model, train_dataset, criterion, optimizer, device):
         train_acc += acc.item()
         train_loss += loss.item()
 
+    if scheduler_name == 'cosine':
+        scheduler.step()
+
     train_loss = train_loss / len(train_dataset)
     train_acc = train_acc / len(train_dataset)
 
     return train_loss, train_acc
 
-def val(model, val_dataset, criterion, device):
+def val(model, val_dataset, criterion, device, scheduler, scheduler_name):
     # Evaluate the model on the validation set
     model.eval()
     val_loss = 0.0
@@ -171,17 +178,38 @@ def val(model, val_dataset, criterion, device):
         # Calculate validation accuracy
         val_acc = val_acc / len(val_dataset)
         
+        if scheduler_name == 'plateau':
+            scheduler.step(val_loss)
+
         return val_loss, val_acc 
  
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--turnoff')
+    parser.add_argument('--num_epochs')
+    parser.add_argument('--batch_size')
+    parser.add_argument('--lr')
+    parser.add_argument('--momentum')
+    parser.add_argument('--T_max')
+    parser.add_argument('--eta_min')
+    parser.add_argument('--patience')
+    parser.add_argument('--min_delta')
+    parser.add_argument('--mode')
+    parser.add_argument('--scheduler')
+    parser.add_argument('--optimizer')
+
+    args = parser.parse_args()
+
+    turn_off = args.turnoff is not None
+
     run_id = generate_run_id()
 
     dataset = prepare_data()    
 
     class_names = kvasir_gradcam_class_names()
     
-    train_set, val_set = df_train_test_split(dataset, 0.2)
-    # val_set, test_set = df_train_test_split(val_set, 0.5)
+    train_set, val_set = df_train_test_split(dataset, 0.3) 
     
     train_dataset = Kvasir(
         train_set['path'].to_numpy(), 
@@ -195,36 +223,58 @@ if __name__ == '__main__':
         val_set['label'].to_numpy(), 
         val_set['code'].to_numpy(), 
         val_set['bbox'].to_numpy(), 
-        train=False)
-    
-    # test_dataset = Kvasir(
-    #     test_set['path'].to_numpy(), 
-    #     test_set['label'].to_numpy(), 
-    #     test_set['code'].to_numpy(), 
-    #     test_set['bbox'].to_numpy(), 
-    #     train=False)
+        train=False) 
 
     num_classes = len(class_names)
 
     pretrained_model = prepare_pretrained_model(num_classes)
 
+    if device == 'cuda':
+        torch.compile(pretrained_model, 'max-autotune')
+
     logging.info('Declaring hyper parameters')
     
-    # # Train run hyper parameters
-    # Define loss function (Binary Cross Entropy Loss in this case, for multi-label classification)
+    # Train run hyper parameters
 
     criterion = CrossEntropyLoss()
-    lr = 1e-5
-    momentum = 0.9
-    
-    # Define optimizer
-    optimizer = optim.SGD(pretrained_model.parameters(), lr=lr, momentum=momentum)
-    early_stopper = EarlyStopper(patience=3, min_delta=0.01)
-    
+
     # Training loop
-    num_epochs = 50
-    batch_size = 24
+
+    num_epochs = int(args.num_epochs) or 100
+    batch_size = int(args.batch_size) or 32
+    lr = float(args.lr) or 0.01
+    momentum = float(args.momentum) or 0.9
     
+    # Cosine Annealing LR params
+
+    T_max = int(args.T_max) or 100
+    eta_min = float(args.eta_min) or 0.001
+    
+    # ReduceLROnPlateau params
+
+    mode = args.mode or 'min'
+
+    patience = int(args.patience) or 5
+    min_delta = float(args.min_delta) or 0.01
+    
+    # Define optimizer, scheduler and early stop
+
+    optimizer = None
+
+    if args.optimizer == 'sgd':
+        optimizer = optim.SGD(pretrained_model.parameters(), lr=lr, momentum=momentum)
+    elif args.optimizer == 'adam':
+        optimizer = optim.Adam(pretrained_model.parameters(), lr=lr)
+        
+    early_stopper = EarlyStopper(patience=patience, min_delta=min_delta)
+
+    scheduler = None
+
+    if args.scheduler == 'plateau':
+        scheduler = ReduceLROnPlateau(optimizer=optimizer, mode=mode)
+    elif args.scheduler == 'cosine':
+        scheduler = CosineAnnealingLR(optimizer=optimizer, T_max=T_max, eta_min=eta_min)
+
     pretrained_model.to(device)
 
     train_loss_ckp = None
@@ -258,6 +308,8 @@ if __name__ == '__main__':
         num_epochs=num_epochs, 
         batch_size=batch_size,
         optimizer=optimizer, 
+        scheduler=scheduler,
+        scheduler_name=args.scheduler,
         device=device, 
         train_dataset=train_dataset, 
         val_dataset=val_dataset, 
@@ -277,19 +329,13 @@ if __name__ == '__main__':
     torch.save(best_weights, f"{run_path}/model.pt")
 
     with open(f"{run_path}/run.json", "w") as f:
-        config = {
-            'criterion' : criterion.__class__.__name__,
-            'lr' : lr,
-            'num_epochs' : num_epochs,
-            'batch_size' : batch_size,
-            'momentum' : momentum,
-            'train_loss' : train_loss,
-            'train_acc' : train_acc,
-            'val_loss' : val_loss,
-            'val_acc' : val_acc,
-            'best_acc' : best_acc,
-            'run_id' : run_id
-        }
+        config = vars(args)
+        config['train_loss'] = train_loss
+        config['val_loss'] = val_loss
+        config['train_acc'] = train_acc
+        config['val_acc'] = val_acc
+        config['best_acc'] = best_acc
+        config['run_id'] = run_id
         json.dump(config, f)
 
     os.remove(os.getenv('KVASIR_GRADCAM_CHECKPOINT'))
@@ -315,3 +361,9 @@ if __name__ == '__main__':
                         f"{os.getenv('KVASIR_GRADCAM_RUN')}")
         
         logging.info(f'New best run: {best_run}')
+
+    if turn_off:
+        if args.turnoff == 'f':
+            os.system('shutdown /p /f')
+        else:
+            os.system(f"shutdown /s /t {int(args.turnoff)}")

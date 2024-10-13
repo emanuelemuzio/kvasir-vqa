@@ -4,6 +4,7 @@
 /kvasir_vqa
 /model/kvasir_gradcam/runs/*
 *.pt
+testarg.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
