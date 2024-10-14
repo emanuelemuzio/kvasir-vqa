@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from sklearn.utils import shuffle
 import logging
 from datetime import datetime
+import cv2 as cv
 
 now = datetime.now()
 now = now.strftime("%Y-%m-%d")
@@ -44,7 +45,7 @@ class Kvasir(Dataset):
             self.transform = v2.Compose([
                 v2.RandomResizedCrop(224),
                 v2.RandomHorizontalFlip(),
-                v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+                v2.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.05),
                 v2.ToDtype(torch.float32, scale=True),
                 v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ])
@@ -72,6 +73,13 @@ class Kvasir(Dataset):
 
         # Apply transformations
         transformed_image = self.transform(img)
+
+        # cv_img = transformed_image.permute(1, 2, 0).numpy()
+        # cv_img = cv.cvtColor(cv_img, cv.COLOR_BGR2RGB)
+
+        # cv.imshow('test', cv_img)
+        # cv.waitKey(0)
+        # cv.destroyAllWindows()
         
         return transformed_image, label, path, code
     
@@ -79,7 +87,9 @@ def format_bbox(x):
     if x == '[]':
         return []
     else:
-        return list(map(int, x.split(',')))
+        split = x[1:-1].split(',')
+        bbox = [int(num) for num in split]
+        return bbox
     
 # Prepare a Hyper-Kvasir df joint with Kvasir Instrument
          
@@ -124,7 +134,7 @@ def prepare_data():
                         path,
                         bbox['label'],
                         code,
-                        f"{bbox['ymin']}, {bbox['ymax']}, {bbox['xmin']}, {bbox['xmax']}"
+                        f"[{bbox['ymin']},{bbox['ymax']},{bbox['xmin']},{bbox['xmax']}]"
                     ]
                 ) 
 
@@ -151,7 +161,7 @@ def prepare_data():
                         path,
                         bbox['label'],
                         code,
-                        f"{bbox['ymin']}, {bbox['ymax']}, {bbox['xmin']}, {bbox['xmax']}"
+                        f"[{bbox['ymin']},{bbox['ymax']},{bbox['xmin']},{bbox['xmax']}]"
                     ]
                 ) 
 
@@ -171,7 +181,7 @@ def prepare_data():
                         f"{os.getenv('HYPER_KVASIR')}/{path}",
                         label,
                         code[:-4],
-                        []
+                        "[]"
                     ]
                 )
 
@@ -185,6 +195,8 @@ def prepare_data():
         df.to_csv(os.getenv('KVASIR_GRADCAM_CSV'), index=False)
 
         logging.info('Kvasir Df created')
+
+        df['bbox'] = df['bbox'].apply(format_bbox)
 
         if not os.path.exists(os.getenv('KVASIR_GRADCAM_CLASSES')):
             generate_kvasir_gradcam_classes_json(df)

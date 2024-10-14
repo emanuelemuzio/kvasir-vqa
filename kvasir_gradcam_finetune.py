@@ -18,6 +18,7 @@ from dataset import Kvasir, prepare_data, df_train_test_split, kvasir_gradcam_cl
 from model import prepare_pretrained_model
 from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR
 import argparse
+from plot_generator import plot_run
 
 now = datetime.now()
 now = now.strftime("%Y-%m-%d")
@@ -361,6 +362,8 @@ if __name__ == '__main__':
                         f"{os.getenv('KVASIR_GRADCAM_RUN')}")
         
         logging.info(f'New best run: {best_run}')
+
+    plot_run(base_path=os.getenv('KVASIR_GRADCAM_RUNS'), run_id=run_id)
 
     if turn_off:
         if args.turnoff == 'f':
