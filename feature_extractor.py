@@ -13,7 +13,8 @@ from pytorch_grad_cam.utils.image import (
 import cv2 as cv
 from pytorch_grad_cam import GuidedBackpropReLUModel
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
-from model import prepare_pretrained_model, get_activation
+from model import prepare_pretrained_model
+import argparse
 
 load_dotenv()
 
@@ -27,13 +28,26 @@ def get_img(path: str):
     return rgb_img, input_tensor
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--id")
+
+    args = parser.parse_args()
+
+    weights_path = None
+
+    if args.id is not None:
+        weights_path = f"{os.getenv('KVASIR_GRADCAM_RUNS')}/{args.id}/model.pt"
+    else:
+        weights_path = os.getenv('KVASIR_GRADCAM_MODEL')
+
     dataset = prepare_data()
     class_names = kvasir_gradcam_class_names()
     num_classes = len(class_names)
 
     model = prepare_pretrained_model(num_classes=num_classes)
 
-    model.load_state_dict(torch.load(os.getenv('KVASIR_GRADCAM_MODEL')))
+    model.load_state_dict(torch.load(weights_path))
     
     target_layers = [model.layer4]
 

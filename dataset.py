@@ -2,7 +2,7 @@
 from datasets import load_dataset
 import os
 import pandas as pd
-from torchvision.io import read_image
+from torchvision.utils import save_image
 from torch.utils.data import Dataset
 from torchvision.transforms import v2
 import torch
@@ -12,7 +12,10 @@ from dotenv import load_dotenv
 from sklearn.utils import shuffle
 import logging
 from datetime import datetime
+from math import ceil
 import cv2 as cv
+from random import randint as rand
+from PIL import Image
 
 now = datetime.now()
 now = now.strftime("%Y-%m-%d")
@@ -43,17 +46,18 @@ class Kvasir(Dataset):
         # Define transformations
         if self.train:
             self.transform = v2.Compose([
-                v2.RandomResizedCrop(224),
+                # v2.RandomResizedCrop(224),
                 v2.RandomHorizontalFlip(),
-                v2.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.05),
-                v2.ToDtype(torch.float32, scale=True),
-                v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                v2.RandomRotation((20, 60)),
+                # v2.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.05),
+                v2.ToDtype(torch.float32),
+                # v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ])
         else:
             self.transform = v2.Compose([
-                v2.Resize((224, 224)),
-                v2.ToDtype(torch.float32, scale=True),
-                v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                # v2.Resize((224, 224)),
+                v2.ToDtype(torch.float32),
+                # v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ])
         
         logging.info('Initialized Dataset')
@@ -67,11 +71,12 @@ class Kvasir(Dataset):
         code = self.code[idx] 
         full_path = f"{path}/{code}.jpg"
         img = read_image(full_path)
+        transformed_image = None
         bbox = self.bbox[idx] 
+
         if len(bbox) > 0:
             img = img[:, bbox[0]:bbox[1], bbox[2]:bbox[3]]
 
-        # Apply transformations
         transformed_image = self.transform(img)
 
         # cv_img = transformed_image.permute(1, 2, 0).numpy()
@@ -104,9 +109,9 @@ def generate_kvasir_gradcam_classes_json(df : pd.DataFrame):
     with open(os.getenv('KVASIR_GRADCAM_CLASSES'), 'w') as f:
         json.dump(classes, f)
 
-def prepare_data():
-    if os.path.exists(os.getenv('KVASIR_GRADCAM_CSV')):
-        df = pd.read_csv(os.getenv('KVASIR_GRADCAM_CSV'))
+def prepare_data(data_path, aug=False):
+    if os.path.exists(data_path):
+        df = pd.read_csv(data_path)
 
         df['bbox'] = df['bbox'].apply(format_bbox)
 
@@ -190,9 +195,49 @@ def prepare_data():
         data = kvasir_inst_data + hyper_kvasir_data 
 
         df = pd.DataFrame(data, columns=rows) 
+
+        if aug:
+            logging.info('Augmenting data')
+
+            AUG_THRESHOLD = int(os.getenv('AUG_THRESHOLD'))
+            labels = list(set(df["label"]))
+
+            labels_count = {}
+
+            for label in labels:
+                labels_count[label] = len(df[df['label'] == label])
+
+            augmented_images = []
+
+            for l, n in labels_count.items():
+                if n < AUG_THRESHOLD:
+                    n_augs = ceil(AUG_THRESHOLD / n)
+                    filt = df[df['label'] == l]
+                        
+                    for i in range(n):
+                        row = filt.iloc[i]
+                            
+                        path = row['path']
+                        label = row['label']
+                        code = row['code']
+                        bbox = row['bbox']
+
+                        src = f"{path}/{code}.jpg"
+                            
+                        new_paths = augment_image(src, code, n_augs)
+
+                        for p in new_paths:
+                            augmented_images.append([os.getenv('AUGMENTED_DATA'), l, p, bbox])
+
+            df_aug = pd.DataFrame(augmented_images, columns=rows)
+
+            logging.info(f"Created {len(augmented_images)} images")
+
+            df = pd.concat((df, df_aug), axis=0)
+
         df = shuffle(df)
 
-        df.to_csv(os.getenv('KVASIR_GRADCAM_CSV'), index=False)
+        df.to_csv(data_path, index=False)
 
         logging.info('Kvasir Df created')
 
@@ -260,6 +305,41 @@ def label2id(label : str) -> str:
 
 def label2id_list(label_list : list) -> list:
     return list(map(label2id, label_list))
+
+def augment_image(src, code, num):
+
+    data = []
+
+    random_rotations = []
+    
+    img = Image.open(src)
+
+    for i in range(num):
+        r_min = None
+        r_max = None
+
+        while True:
+            r_min = rand(0, 180)
+            r_max = rand(180, 270)
+
+            if (r_min, r_max) not in random_rotations:
+                random_rotations.append((r_min, r_max))
+                break
+        
+        transform = v2.Compose([
+                    v2.RandomHorizontalFlip(),
+                    v2.RandomRotation((r_min, r_max))])
+        
+        aug = transform(img)
+
+        new_code = f"{code}-aug-{i + 1}"
+
+        new = f"{os.getenv('AUGMENTED_DATA')}/{new_code}.jpg"
+
+        aug.save(new)
+        data.append(new_code)
+
+    return data
 
 def main():
     retrieve_dataset()

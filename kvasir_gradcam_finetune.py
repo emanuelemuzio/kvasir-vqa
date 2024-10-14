@@ -187,7 +187,7 @@ def val(model, val_dataset, criterion, device, scheduler, scheduler_name):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--turnoff')
+    parser.add_argument('--turnoff', help="-1 for no turnoff, 0 for instant turnoff, x to plan the turnoff in x seconds") 
     parser.add_argument('--num_epochs')
     parser.add_argument('--batch_size')
     parser.add_argument('--lr')
@@ -202,7 +202,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    turn_off = args.turnoff is not None
+    turnoff = int(args.turnoff)
 
     run_id = generate_run_id()
 
@@ -365,8 +365,5 @@ if __name__ == '__main__':
 
     plot_run(base_path=os.getenv('KVASIR_GRADCAM_RUNS'), run_id=run_id)
 
-    if turn_off:
-        if args.turnoff == 'f':
-            os.system('shutdown /p /f')
-        else:
-            os.system(f"shutdown /s /t {int(args.turnoff)}")
+    if turnoff >= 0:
+        os.system(f"shutdown /s /t {turnoff}")

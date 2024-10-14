@@ -2,44 +2,34 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "GradCAM fine tune with turn off time",
+            "name": "GradCAM fine tune",
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "--turnoff=120",
+                "--turnoff=-1",
                 "--num_epochs=300",
-                "--batch_size=25",
-                "--lr=0.00001",
+                "--batch_size=16",
+                "--lr=0.001",
                 "--momentum=0.9",
                 "--T_max=100",
                 "--eta_min=0.001",
-                "--patience=5",
-                "--min_delta=0.025",
-                "--scheduler=plateau",
-                "--optimizer=sgd",
+                "--patience=10",
+                "--min_delta=0.001",
+                "--scheduler=cosine",
+                "--optimizer=adam",
                 "--mode=min"
             ]
         },
         {
-            "name": "GradCAM fine tune no turn off",
+            "name": "Test GradCAM results",
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "--num_epochs=300",
-                "--batch_size=32",
-                "--lr=0.00001",
-                "--momentum=0.9",
-                "--T_max=100",
-                "--eta_min=0.001",
-                "--patience=5",
-                "--min_delta=0.025",
-                "--scheduler=plateau",
-                "--optimizer=sgd",
-                "--mode=min"
+                "--id=14102024112802"
             ]
         }
     ]

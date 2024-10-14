@@ -21,3 +21,6 @@ def generate_run_id():
     now = datetime.now()
     now = now.strftime("%d%m%Y%H%M%S")
     return now
+
+def format_float(x):
+    return "{:.2f}".format(x)
