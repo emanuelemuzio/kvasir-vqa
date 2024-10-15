@@ -8,18 +8,21 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "--turnoff=-1",
+                "--turnoff=0",
                 "--num_epochs=300",
-                "--batch_size=16",
-                "--lr=0.001",
+                "--batch_size=64",
+                "--lr=0.00002",
                 "--momentum=0.9",
                 "--T_max=100",
                 "--eta_min=0.001",
                 "--patience=10",
-                "--min_delta=0.001",
-                "--scheduler=cosine",
+                "--min_delta=0.0025",
+                "--scheduler=linear",
                 "--optimizer=adam",
-                "--mode=min"
+                "--mode=min",
+                "--weight_decay=0.00001",
+                "--resnet=152",
+                "--freeze_layers=1"
             ]
         },
         {
@@ -29,7 +32,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "--id=14102024112802"
+                "--id=15102024192843"
             ]
         }
     ]

@@ -2,18 +2,17 @@
 from datasets import load_dataset
 import os
 import pandas as pd
-from torchvision.utils import save_image
+from torchvision.io import read_image
 from torch.utils.data import Dataset
 from torchvision.transforms import v2
-import torch
 import numpy as np
+from model import transform
 import json
 from dotenv import load_dotenv
 from sklearn.utils import shuffle
 import logging
 from datetime import datetime
 from math import ceil
-import cv2 as cv
 from random import randint as rand
 from PIL import Image
 
@@ -44,21 +43,7 @@ class Kvasir(Dataset):
         self.train = train 
          
         # Define transformations
-        if self.train:
-            self.transform = v2.Compose([
-                # v2.RandomResizedCrop(224),
-                v2.RandomHorizontalFlip(),
-                v2.RandomRotation((20, 60)),
-                # v2.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.05),
-                v2.ToDtype(torch.float32),
-                # v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            ])
-        else:
-            self.transform = v2.Compose([
-                # v2.Resize((224, 224)),
-                v2.ToDtype(torch.float32),
-                # v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            ])
+        self.transform = transform()
         
         logging.info('Initialized Dataset')
     
@@ -69,15 +54,15 @@ class Kvasir(Dataset):
         label = self.label[idx]
         path = self.path[idx]
         code = self.code[idx] 
-        full_path = f"{path}/{code}.jpg"
-        img = read_image(full_path)
-        transformed_image = None
         bbox = self.bbox[idx] 
+        full_path = f"{path}/{code}.jpg"
+        img = read_image(full_path)        
 
         if len(bbox) > 0:
             img = img[:, bbox[0]:bbox[1], bbox[2]:bbox[3]]
+            # img = ZeroPad2d(3)(img)
 
-        transformed_image = self.transform(img)
+        transformed_image = self.transform(img.float())
 
         # cv_img = transformed_image.permute(1, 2, 0).numpy()
         # cv_img = cv.cvtColor(cv_img, cv.COLOR_BGR2RGB)

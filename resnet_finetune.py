@@ -16,7 +16,7 @@ from callback import EarlyStopper
 from util import generate_run_id
 from dataset import Kvasir, prepare_data, df_train_test_split, kvasir_gradcam_class_names, label2id_list
 from model import prepare_pretrained_model
-from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR
+from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR
 import argparse
 from plot_generator import plot_run
 
@@ -199,18 +199,25 @@ if __name__ == '__main__':
     parser.add_argument('--mode')
     parser.add_argument('--scheduler')
     parser.add_argument('--optimizer')
+    parser.add_argument('--weight_decay')
+    parser.add_argument('--resnet')
+    parser.add_argument('--freeze_layers')
 
     args = parser.parse_args()
 
     turnoff = int(args.turnoff)
 
+    freeze_layers = args.freeze_layers == '1'
+
+    resnet = args.resnet or os.getenv('RESNET')
+
     run_id = generate_run_id()
 
-    dataset = prepare_data()    
+    dataset = prepare_data(os.getenv('KVASIR_GRADCAM_CSV_AUG'), aug=True)    
 
     class_names = kvasir_gradcam_class_names()
     
-    train_set, val_set = df_train_test_split(dataset, 0.3) 
+    train_set, val_set = df_train_test_split(dataset, 0.2) 
     
     train_dataset = Kvasir(
         train_set['path'].to_numpy(), 
@@ -228,7 +235,7 @@ if __name__ == '__main__':
 
     num_classes = len(class_names)
 
-    pretrained_model = prepare_pretrained_model(num_classes)
+    pretrained_model = prepare_pretrained_model(resnet, num_classes, freeze_layers=freeze_layers, inference=False)
 
     if device == 'cuda':
         torch.compile(pretrained_model, 'max-autotune')
@@ -245,6 +252,7 @@ if __name__ == '__main__':
     batch_size = int(args.batch_size) or 32
     lr = float(args.lr) or 0.01
     momentum = float(args.momentum) or 0.9
+    weight_decay = float(args.weight_decay) or 1e-4
     
     # Cosine Annealing LR params
 
@@ -265,7 +273,7 @@ if __name__ == '__main__':
     if args.optimizer == 'sgd':
         optimizer = optim.SGD(pretrained_model.parameters(), lr=lr, momentum=momentum)
     elif args.optimizer == 'adam':
-        optimizer = optim.Adam(pretrained_model.parameters(), lr=lr)
+        optimizer = optim.Adam(pretrained_model.parameters(), lr=lr, weight_decay=weight_decay)
         
     early_stopper = EarlyStopper(patience=patience, min_delta=min_delta)
 
@@ -275,6 +283,8 @@ if __name__ == '__main__':
         scheduler = ReduceLROnPlateau(optimizer=optimizer, mode=mode)
     elif args.scheduler == 'cosine':
         scheduler = CosineAnnealingLR(optimizer=optimizer, T_max=T_max, eta_min=eta_min)
+    elif args.scheduler == 'linear':
+        scheduler = LinearLR(optimizer=optimizer)
 
     pretrained_model.to(device)
 

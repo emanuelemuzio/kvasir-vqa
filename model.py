@@ -1,9 +1,11 @@
 from torchvision import models
 from dotenv import load_dotenv
-from torch import nn
 from torchvision import models
 from datetime import datetime
 import logging
+import torch
+from torchvision.transforms import v2
+from dataset import prepare_data, kvasir_gradcam_class_names
 
 now = datetime.now()
 now = now.strftime("%Y-%m-%d")
@@ -21,28 +23,35 @@ logging.basicConfig(
 
 load_dotenv()
 
-def prepare_pretrained_model(num_classes):
-    # # Initialize pre-trained model
-    pretrained_model = models.resnet152()
+def prepare_pretrained_model(resnet='152', num_classes=0, freeze_layers=False, inference=False):
+    pretrained_model = None
+
+    if resnet == '152':
+        pretrained_model = models.resnet152()
+    elif resnet == '101':
+        pretrained_model = models.resnet101()
+    elif resnet == '50':
+        pretrained_model = models.resnet50()
+    
     pretrained_model.fc = nn.Linear(pretrained_model.fc.in_features, num_classes)
 
-    # Tuning the whole Net
-    for param in pretrained_model.parameters():
-        param.requires_grad = True
+    if not inference:
 
-    logging.info('Froze pre trained layers parameters')
+        for param in pretrained_model.parameters():
+            param.requires_grad = not freeze_layers
 
-    # # Unfreeze the parameters of the last few layers for fine-tuning
-    # for param in pretrained_model.layer4.parameters():
-    #     param.requires_grad = True
+        for param in pretrained_model.layer4.parameters():
+            param.requires_grad = True
 
-    logging.info('Unfroze last few layers for fine tuning')
 
     return pretrained_model
 
-activation = {}
+def transform():
 
-def get_activation(name):
-    def hook(model, input, output):
-        activation[name] = output.detach()
-    return hook
+    transform = v2.Compose([
+        v2.Resize((224,224)),
+        v2.ToDtype(torch.float32, scale=True),
+        v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+
+    return transform 
