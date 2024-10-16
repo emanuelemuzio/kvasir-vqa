@@ -6,7 +6,6 @@ from torchvision.io import read_image
 from torch.utils.data import Dataset
 from torchvision.transforms import v2
 import numpy as np
-from model import transform
 import json
 from dotenv import load_dotenv
 from sklearn.utils import shuffle
@@ -15,6 +14,7 @@ from datetime import datetime
 from math import ceil
 from random import randint as rand
 from PIL import Image
+import torch
 
 now = datetime.now()
 now = now.strftime("%Y-%m-%d")
@@ -325,6 +325,16 @@ def augment_image(src, code, num):
         data.append(new_code)
 
     return data
+
+def transform():
+
+    transform = v2.Compose([
+        v2.Resize((224,224)),
+        v2.ToDtype(torch.float32, scale=True),
+        v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+
+    return transform 
 
 def main():
     retrieve_dataset()

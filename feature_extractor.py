@@ -16,7 +16,7 @@ import cv2 as cv
 # from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 import argparse
 import json
-from model import get_feature_extractor, prepare_pretrained_model
+from model import prepare_pretrained_model
 from dataset import kvasir_gradcam_class_names
 
 activation = {}
@@ -30,7 +30,7 @@ load_dotenv()
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = 'cpu' 
 
-def init_feature_extractor(resnet='152', weights_path=os.getenv('KVASIR_GRADCAM_MODEL'), inference=True):
+def init_feature_extractor(resnet='152', weights_path=os.getenv('KVASIR_GRADCAM_MODEL'), inference=True, device='cpu'):
     class_names = kvasir_gradcam_class_names()
     num_classes = len(class_names)
 
@@ -38,16 +38,11 @@ def init_feature_extractor(resnet='152', weights_path=os.getenv('KVASIR_GRADCAM_
 
     model.load_state_dict(torch.load(weights_path))
 
-    model.fc.register_forward_hook(get_activation('fc'))
+    feature_extractor = torch.nn.Sequential(*list(model.children())[:-1])
 
-    modules = list(model.children())[:-1]
+    feature_extractor.to(device)
 
-    model = nn.Sequential(*modules)
-
-    for p in model.parameters():
-        p.requires_grad = False
-
-    return model
+    return feature_extractor
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

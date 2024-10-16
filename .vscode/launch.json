@@ -2,22 +2,22 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "GradCAM fine tune",
+            "name": "Fine tune feature extractor",
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "--turnoff=0",
+                "--turnoff=-1",
                 "--num_epochs=300",
                 "--batch_size=64",
-                "--lr=0.00002",
+                "--lr=0.00005",
                 "--momentum=0.9",
                 "--T_max=100",
                 "--eta_min=0.001",
                 "--patience=10",
                 "--min_delta=0.0025",
-                "--scheduler=linear",
+                "--scheduler=plateau",
                 "--optimizer=adam",
                 "--mode=min",
                 "--weight_decay=0.00001",
@@ -26,13 +26,13 @@
             ]
         },
         {
-            "name": "Test GradCAM results",
+            "name": "Test with run ID",
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "--id=15102024192843"
+                "--id=15102024233441"
             ]
         }
     ]

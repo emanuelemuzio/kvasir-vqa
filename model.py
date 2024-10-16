@@ -3,9 +3,9 @@ from dotenv import load_dotenv
 from torchvision import models
 from datetime import datetime
 import logging
-import torch
-from torchvision.transforms import v2
-from dataset import prepare_data, kvasir_gradcam_class_names
+import os
+import torch.nn as nn
+from transformers import AutoTokenizer
 
 now = datetime.now()
 now = now.strftime("%Y-%m-%d")
@@ -43,15 +43,9 @@ def prepare_pretrained_model(resnet='152', num_classes=0, freeze_layers=False, i
         for param in pretrained_model.layer4.parameters():
             param.requires_grad = True
 
-
     return pretrained_model
 
-def transform():
-
-    transform = v2.Compose([
-        v2.Resize((224,224)),
-        v2.ToDtype(torch.float32, scale=True),
-        v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ])
-
-    return transform 
+def get_tokenizer(model_name=os.getenv('TOKENIZER')):
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    
+    return tokenizer

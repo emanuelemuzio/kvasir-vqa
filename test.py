@@ -1,46 +1,53 @@
-from transformers import AutoModelForImageClassification, AutoFeatureExtractor
-from PIL import Image
-import requests
-from pytorch_grad_cam import GradCAM
-from pytorch_grad_cam.ablation_layer import AblationLayerVit
-from pytorch_grad_cam import GuidedBackpropReLUModel
-from pytorch_grad_cam.utils.image import show_cam_on_image, preprocess_image
+from model import get_tokenizer
+from dotenv import load_dotenv
+import os
+from feature_extractor import init_feature_extractor
+import argparse
 import cv2
+import numpy as np
+import torch
+from pytorch_grad_cam.utils.image import (preprocess_image)
+import json
 
-# this is an image from "polyps" class
-url = 'https://github.com/mmuratarat/turkish/blob/master/_posts/images/example_polyps_image.jpg?raw=true'
-image = Image.open(requests.get(url, stream=True).raw)
+load_dotenv()
 
-model = AutoModelForImageClassification.from_pretrained("mmuratarat/kvasir-v2-classifier")
-feature_extractor = AutoFeatureExtractor.from_pretrained("mmuratarat/kvasir-v2-classifier")
-inputs = feature_extractor(image, return_tensors="pt")
-input_tensor = inputs['pixel_values']
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-id2label = {'0': 'dyed-lifted-polyps', 
-            '1': 'dyed-resection-margins', 
-            '2': 'esophagitis', 
-            '3': 'normal-cecum', 
-            '4': 'normal-pylorus', 
-            '5': 'normal-z-line', 
-            '6': 'polyps', 
-            '7': 'ulcerative-colitis'}
+parser = argparse.ArgumentParser()
+parser.add_argument('--id')
 
-# logits = model(**inputs).logits
-# predicted_label = logits.argmax(-1).item()
-# predicted_class = id2label[str(predicted_label)]
+args = parser.parse_args()
 
-target_layers = [model.vit.layernorm]
+run_id = args.id
 
-cam = GradCAM(model=model, target_layers=target_layers, reshape_transform=None)
+resnet = None
+weights_path = None
 
-targets = None
+if args.id is not None:
+    weights_path = f"{os.getenv('KVASIR_GRADCAM_RUNS')}/{args.id}/model.pt"
+    with open(f"{os.getenv('KVASIR_GRADCAM_RUNS')}/{args.id}/run.json", 'r') as file:
+        data = json.load(file)
+        if 'resnet' in data:
+            resnet = data['resnet']
+        else:
+            resnet = os.getenv('RESNET')
+else:
+    weights_path = os.getenv('KVASIR_GRADCAM_MODEL')
+    resnet = os.getenv('RESNET') 
 
-grayscale_cam = cam(input_tensor=input_tensor, targets=targets)
+tokenizer = get_tokenizer()
+sentence = "Are there any instruments in the image? Check all that are present."
+feature_ext = init_feature_extractor(resnet=resnet, weights_path=weights_path, inference=False, device= device)
+tokenizer_output = tokenizer(sentence, add_special_tokens=True, return_tensors='pt', padding='max_length', max_length=14, truncation=True)['input_ids'].squeeze(0).detach().cpu().numpy()
 
-# Here grayscale_cam has only one image in the batch
-grayscale_cam = grayscale_cam[0, :]
+test_img_path = "./data/kvasir-instrument/images/ckcu9jucf00083b5ytpqoue72.jpg"
 
-cam_image = show_cam_on_image(input_tensor, grayscale_cam)
-cv2.imwrite(f'test/_cam.jpg', cam_image)
+rgb_img = cv2.imread(test_img_path, 1)[:, :, ::-1]
+rgb_img = np.float32(rgb_img) / 255
+input_tensor = preprocess_image(rgb_img, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]).to(device)
 
-# print(predicted_class)
+feature_extractor_output = feature_ext(input_tensor).squeeze(0).squeeze(-1).squeeze(1).detach().cpu().numpy()
+
+joint_embedding = np.multiply(tokenizer_output, feature_extractor_output)
+
+x = 1
