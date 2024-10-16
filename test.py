@@ -38,15 +38,15 @@ else:
 tokenizer = get_tokenizer()
 sentence = "Are there any instruments in the image? Check all that are present."
 feature_ext = init_feature_extractor(resnet=resnet, weights_path=weights_path, inference=False, device= device)
-tokenizer_output = tokenizer(sentence, add_special_tokens=True, return_tensors='pt', padding='max_length', max_length=14, truncation=True)['input_ids'].squeeze(0).detach().cpu().numpy()
+tokenizer_output = tokenizer(sentence, add_special_tokens=True, return_tensors='pt', padding='max_length', max_length=14, truncation=True)['input_ids'].detach().cpu()
 
 test_img_path = "./data/kvasir-instrument/images/ckcu9jucf00083b5ytpqoue72.jpg"
 
 rgb_img = cv2.imread(test_img_path, 1)[:, :, ::-1]
 rgb_img = np.float32(rgb_img) / 255
-input_tensor = preprocess_image(rgb_img, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]).to(device)
+input_tensor = preprocess_image(rgb_img, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]).to(device).squeeze(0)
 
-feature_extractor_output = feature_ext(input_tensor).squeeze(0).squeeze(-1).squeeze(1).detach().cpu().numpy()
+feature_extractor_output = feature_ext(input_tensor).detach().cpu()
 
 joint_embedding = np.multiply(tokenizer_output, feature_extractor_output)
 
