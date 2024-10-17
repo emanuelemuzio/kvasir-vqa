@@ -5,15 +5,10 @@ import numpy as np
 from PIL import Image
 from torch import nn
 import torchvision
-# from pytorch_grad_cam import GradCAM 
-# from pytorch_grad_cam.utils.image import show_cam_on_image
-# from dataset import prepare_data, kvasir_gradcam_class_names 
 from pytorch_grad_cam.utils.image import (
     show_cam_on_image, deprocess_image, preprocess_image
 )
 import cv2 as cv
-# from pytorch_grad_cam import GuidedBackpropReLUModel
-# from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 import argparse
 import json
 from model import prepare_pretrained_model
