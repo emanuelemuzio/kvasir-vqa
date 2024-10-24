@@ -2,7 +2,7 @@
 *.jpg
 *.png
 /kvasir_vqa
-/model/kvasir_gradcam/runs/*
+/model/feature_extractor/runs/*
 *.pt
 testarg.py
 

@@ -6,6 +6,15 @@ import logging
 import os
 import torch.nn as nn
 from transformers import AutoTokenizer
+from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
+import torch
+import numpy as np
+from dotenv import load_dotenv
+from torcheval.metrics.functional import multiclass_accuracy
+from datetime import datetime
+import logging
+from dataset import label2id_list
 
 now = datetime.now()
 now = now.strftime("%Y-%m-%d")
@@ -23,29 +32,238 @@ logging.basicConfig(
 
 load_dotenv()
 
-def prepare_pretrained_model(resnet='152', num_classes=0, freeze_layers=False, inference=False):
-    pretrained_model = None
+'''
+Function for retrieving the base model for either inference or training.
+The model name is passed from the parameters.
 
-    if resnet == '152':
-        pretrained_model = models.resnet152()
-    elif resnet == '101':
-        pretrained_model = models.resnet101()
-    elif resnet == '50':
-        pretrained_model = models.resnet50()
+Accepted model names are: resnet (50, 101 and 152) and vgg(16)
+
+Inference =  0
+Train only top layer = 1
+Train all layers = 2
+'''
+
+def prepare_model(model_name='resnet152', num_classes=0, freeze='2'):
     
-    pretrained_model.fc = nn.Linear(pretrained_model.fc.in_features, num_classes)
+    model = None
 
-    if not inference:
+    if model_name == 'resnet50':
+        
+        model = models.resnet50()
+        model.fc = nn.Linear(model.fc.in_features, num_classes)
+    
+    elif model_name == 'resnet101':
+    
+        model = models.resnet101()
+        model.fc = nn.Linear(model.fc.in_features, num_classes)
+    
+    elif model_name == 'resnet152':
+    
+        model = models.resnet152()
+        model.fc = nn.Linear(model.fc.in_features, num_classes)    
+    
+    elif model_name == 'vgg16':
+    
+        model = models.vgg16()
+        model.classifier[6] = nn.Linear(in_features=4096, out_features=num_classes)
 
-        for param in pretrained_model.parameters():
-            param.requires_grad = not freeze_layers
+    if model_name.startswith('vgg'):
 
-        for param in pretrained_model.layer4.parameters():
-            param.requires_grad = True
+        if freeze == '0':
+            for param in model.parameters():
+                param.requires_grad = False
+        
+        elif freeze == '1':
+            for param in model.classifier[0].parameters():
+                param.requires_grad = True  
+            for param in model.classifier[3].parameters():
+                param.requires_grad = True   
+        
+        elif freeze == '2':
+            for param in model.parameters():
+                param.requires_grad = True
+    
+    elif model_name.startswith('resnet'):
+        
+        if freeze == '0':
+            for param in model.parameters():
+                param.requires_grad = False
+        
+        elif freeze == '1':
+            for param in model.layer4.parameters():
+                param.requires_grad = True
+        
+        elif freeze == '2':
+            for param in model.parameters():
+                param.requires_grad = True
 
-    return pretrained_model
+    return model
+
+'''
+Small utility function for recovering the tokenizer used for the NLP embeddings
+'''
 
 def get_tokenizer(model_name=os.getenv('TOKENIZER')):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     
     return tokenizer
+
+'''
+Evaluation function for the feature extractor, which includes both the train step and the validation
+step for each epoch.
+'''
+
+def feature_extractor_evaluate(model, 
+            num_epochs, 
+            batch_size, 
+            optimizer, 
+            scheduler,
+            scheduler_name,
+            device, 
+            train_dataset, 
+            val_dataset, 
+            criterion, 
+            early_stopper, 
+            class_names=[],
+            train_loss_ckp = [],
+            train_acc_ckp = [],
+            val_loss_ckp = [],
+            val_acc_ckp = [],
+            best_acc_ckp = - np.inf,
+            start_epoch = 1,
+            run_id='test',
+            logging=None):
+    
+    logging.info('Starting model evaluation')
+
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
+    
+    train_loss = []
+    val_loss = []
+
+    train_acc = []
+    val_acc = []
+    best_acc = - np.inf
+    best_weights = None
+
+    if train_loss_ckp is not None:
+        logging.info(f'Loading {run_id} checkpoint')
+        train_loss += train_loss_ckp
+        train_acc += train_acc_ckp
+        val_loss += val_loss_ckp
+        val_acc += val_acc_ckp
+        best_acc = best_acc_ckp
+        early_stopper.min_validation_loss = min(val_loss)
+
+    # Ciclo di addestramento
+
+    for epoch in tqdm(range(start_epoch, num_epochs + 1)):
+        torch.cuda.empty_cache()
+        epoch_train_loss, epoch_train_acc = feature_extractor_train(model, train_dataloader, criterion, optimizer, class_names, device, scheduler, scheduler_name)
+        train_loss.append(epoch_train_loss)
+        train_acc.append(epoch_train_acc)
+        
+        epoch_val_loss, epoch_val_acc = feature_extractor_val(model, val_dataloader, criterion, optimizer, class_names, device, scheduler, scheduler_name)
+        val_loss.append(epoch_val_loss)
+        val_acc.append(epoch_val_acc)
+        
+        logging.info(f"Epoch [{epoch}/{num_epochs}] Train Loss: {epoch_train_loss:.4f}  Validation Loss: {epoch_val_loss:.4f}, Validation Accuracy: {epoch_val_acc*100:.2f}%")
+
+        print(f"Epoch [{epoch}/{num_epochs}] Train Loss: {epoch_train_loss:.4f}  Validation Loss: {epoch_val_loss:.4f}, Validation Accuracy: {epoch_val_acc*100:.2f}%")
+        
+        if epoch_val_acc > best_acc:
+            best_acc = epoch_val_acc
+            best_weights = model.state_dict()
+
+            torch.save({
+                'model_state_dict' : best_weights,
+                'num_epochs' : epoch,
+                'train_loss' : train_loss,
+                'train_acc' : train_acc,
+                'val_loss' : val_loss,
+                'val_acc' : val_acc,
+                'best_acc' : best_acc,
+                'run_id' : run_id
+            }, os.getenv('FEATURE_EXTRACTOR_CHECKPOINT')) 
+
+            logging.info('Checkpoint reached')
+            
+        if early_stopper.early_stop(epoch_val_loss):
+            logging.info('Early stop activating')
+            break
+            
+    return train_loss, train_acc, val_loss, val_acc, best_acc, best_weights
+
+'''
+Feature extractor train step function
+'''
+
+def feature_extractor_train(model, train_dataset, criterion, optimizer, class_names, device, scheduler, scheduler_name):
+    model.train()
+
+    train_loss = 0.0
+    train_acc = 0.0
+
+    for i, (img, label, __, _) in enumerate(train_dataset):
+
+        img = img.to(device)
+        label = (label2id_list(label, class_names)).to(device)
+
+        optimizer.zero_grad()
+
+        output = model(img)
+
+        loss = criterion(output, label)
+
+        loss.backward()
+
+        optimizer.step() 
+        
+        acc = multiclass_accuracy(output, label) 
+        train_acc += acc.item()
+        train_loss += loss.item()
+
+    if scheduler_name == 'cosine':
+        scheduler.step()
+
+    train_loss = train_loss / len(train_dataset)
+    train_acc = train_acc / len(train_dataset)
+
+    return train_loss, train_acc
+
+'''
+Feature extraction validation step
+'''
+
+def feature_extractor_val(model, val_dataset, criterion, optimizer, class_names, device, scheduler, scheduler_name):
+    # Evaluate the model on the validation set
+    model.eval()
+    val_loss = 0.0
+    val_acc = 0.0
+        
+    with torch.no_grad():
+        for i, (img, label, _, _) in enumerate(val_dataset):
+            img = img.unsqueeze(0).to(device)[0]
+            label = (label2id_list(label, class_names)).to(device)
+
+            optimizer.zero_grad()
+
+            output = model(img)
+
+            loss = criterion(output, label)
+            
+            acc = multiclass_accuracy(output, label)
+            val_acc += acc.item()
+            val_loss += loss.item()
+
+        # Calculate validation loss
+        val_loss /= len(val_dataset)
+
+        # Calculate validation accuracy
+        val_acc = val_acc / len(val_dataset)
+        
+        if scheduler_name == 'plateau':
+            scheduler.step(val_loss)
+
+        return val_loss, val_acc 

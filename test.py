@@ -16,7 +16,7 @@ from pytorch_grad_cam import GuidedBackpropReLUModel
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 from pytorch_grad_cam import GradCAM 
 from pytorch_grad_cam.utils.image import show_cam_on_image
-from dataset import prepare_data, kvasir_gradcam_class_names 
+from dataset import prepare_data, feature_extractor_class_names 
 
 load_dotenv()
 
@@ -34,18 +34,18 @@ resnet = None
 weights_path = None
 
 if args.id is not None:
-    weights_path = f"{os.getenv('KVASIR_GRADCAM_RUNS')}/{args.id}/model.pt"
-    with open(f"{os.getenv('KVASIR_GRADCAM_RUNS')}/{args.id}/run.json", 'r') as file:
+    weights_path = f"{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{args.id}/model.pt"
+    with open(f"{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{args.id}/run.json", 'r') as file:
         data = json.load(file)
         if 'resnet' in data:
             resnet = data['resnet']
         else:
             resnet = os.getenv('RESNET')
 else:
-    weights_path = os.getenv('KVASIR_GRADCAM_MODEL')
+    weights_path = os.getenv('FEATURE_EXTRACTOR_MODEL')
     resnet = os.getenv('RESNET') 
 
-class_names = kvasir_gradcam_class_names()
+class_names = feature_extractor_class_names()
 num_classes = len(class_names)
 
 tokenizer = get_tokenizer()

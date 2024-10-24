@@ -83,7 +83,7 @@ def format_bbox(x):
     
 # Prepare a Hyper-Kvasir df joint with Kvasir Instrument
          
-def generate_kvasir_gradcam_classes_json(df : pd.DataFrame):
+def generate_feature_extractor_classes_json(df : pd.DataFrame):
     class_names = df.label.unique()
 
     classes = {}
@@ -91,8 +91,11 @@ def generate_kvasir_gradcam_classes_json(df : pd.DataFrame):
     for i in range(len(class_names)):
         classes[class_names[i]] = i
 
-    with open(os.getenv('KVASIR_GRADCAM_CLASSES'), 'w') as f:
+    with open(os.getenv('FEATURE_EXTRACTOR_CLASSES'), 'w') as f:
         json.dump(classes, f)
+
+# def load_kvasir_vqa():
+
 
 def prepare_data(data_path, aug=False):
     if os.path.exists(data_path):
@@ -228,15 +231,20 @@ def prepare_data(data_path, aug=False):
 
         df['bbox'] = df['bbox'].apply(format_bbox)
 
-        if not os.path.exists(os.getenv('KVASIR_GRADCAM_CLASSES')):
-            generate_kvasir_gradcam_classes_json(df)
+        if not os.path.exists(os.getenv('FEATURE_EXTRACTOR_CLASSES')):
+            generate_feature_extractor_classes_json(df)
     
-    if not os.path.exists(os.getenv('KVASIR_GRADCAM_CLASSES')):
-        generate_kvasir_gradcam_classes_json(df)
+    if not os.path.exists(os.getenv('FEATURE_EXTRACTOR_CLASSES')):
+        generate_feature_extractor_classes_json(df)
 
     return df
 
-def df_train_test_split(df, test_size=0.2):
+'''
+Utility function for splitting a Dataframe in two sets, 
+by simply taking a user defined % of the dataset.
+'''
+
+def df_train_test_split(df : pd.DataFrame, test_size=0.2) -> pd.DataFrame:
     msk = np.random.rand(len(df)) < test_size
     train_set = df[~msk]
     test_set = df[msk]
@@ -252,6 +260,11 @@ Download the KVASIR-VQA dataset, splitted in the metadata.csv file and the imgs
 def load() -> any:
     return load_dataset(os.getenv('KVASIR_VQA_DATASET'))
 
+'''
+Utility function for retrieving the original Kvasir VQA dataset using the HuggingFace Loader.
+Hyper Kvasir and Kvasir Instrument classes are then remapped to match the classes present in Kvasir VQA.
+'''
+
 def retrieve_dataset() -> None:
     dataset = load()
     dataframe = dataset['raw'].select_columns(['source', 'question', 'answer', 'img_id']).to_pandas()
@@ -265,33 +278,69 @@ def retrieve_dataset() -> None:
         os.makedirs(f"{os.getenv('KVASIR_VQA_DATA')}", exist_ok=True)
         for i, row in dataframe.groupby('img_id').nth(0).iterrows(): # for images
             dataset['raw'][i]['image'].save(f"{os.getenv('KVASIR_VQA_DATA')}/{row['img_id']}.jpg")
-            
-def kvasir_gradcam_classes():
-    f = open(os.getenv('KVASIR_GRADCAM_CLASSES'))
+
+'''
+Utility function for loading the JSON file containing the mapping for the classes, in the form of:
+{
+    class: id
+}
+'''
+
+def feature_extractor_classes():
+    f = open(os.getenv('FEATURE_EXTRACTOR_CLASSES'))
     data = json.load(f)
 
     return data
 
-def kvasir_gradcam_class_names():
-    classes = kvasir_gradcam_classes()
+'''
+Utility function for retrieving a list of classes.
+'''
+
+def feature_extractor_class_names() -> list:
+    classes = feature_extractor_classes()
     return list(classes.keys())
 
-def id2label(idx : int) -> str:
-    classes = kvasir_gradcam_classes()
+'''
+Function for transforming an id to a label
+'''
+
+def id2label(idx : int, classes: list) -> str:
     label = classes.keys()[classes.values().index(idx)]
-    return label
+    return label  
+
+'''
+Function for transforming a list of ids to a list of labels
+'''
 
 def id2label_list(idx_list : list) -> list:
     return list(map(id2label, idx_list))
 
-def label2id(label : str) -> str:
-    classes = kvasir_gradcam_classes()
-    return classes[label]
+'''
+Function for transforming a single label to an id
+'''
 
-def label2id_list(label_list : list) -> list:
-    return list(map(label2id, label_list))
+def label2id(label : str, classes: list) -> str:
+    return classes.index(label)
 
-def augment_image(src, code, num):
+'''
+Function for converting a label list to an id list
+'''
+
+def label2id_list(label_list : list, classes : list) -> list:
+    output = []
+
+    for label in label_list:
+        output.append(label2id(label, classes))
+
+    return torch.tensor(output)
+
+'''
+Function for data image data augmentation. 
+Num new images are created from the source image, applying a random
+rotation and a random horizontal flip.
+'''
+
+def augment_image(src : str, code : str, num : int) -> list:
 
     data = []
 
@@ -326,7 +375,11 @@ def augment_image(src, code, num):
 
     return data
 
-def transform():
+'''
+Preprocessing function, applied before feeding images to the feature extractor.
+'''
+
+def transform() -> v2.Compose:
 
     transform = v2.Compose([
         v2.Resize((224,224)),

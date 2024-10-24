@@ -1,5 +1,6 @@
 from datetime import datetime
 import logging
+import torch
 
 now = datetime.now()
 now = now.strftime("%Y-%m-%d")

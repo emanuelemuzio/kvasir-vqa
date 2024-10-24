@@ -8,21 +8,21 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "--turnoff=-1",
-                "--num_epochs=300",
+                "--turnoff=0",
+                "--num_epochs=200",
                 "--batch_size=64",
-                "--lr=0.00005",
+                "--lr=0.00002",
                 "--momentum=0.9",
                 "--T_max=100",
                 "--eta_min=0.001",
                 "--patience=10",
                 "--min_delta=0.0025",
-                "--scheduler=plateau",
-                "--optimizer=adam",
+                "--scheduler=linear",
+                "--optimizer=sgd",
                 "--mode=min",
-                "--weight_decay=0.00001",
-                "--resnet=152",
-                "--freeze_layers=1"
+                "--weight_decay=0.0001",
+                "--model=vgg16",
+                "--freeze=2"
             ]
         },
         {

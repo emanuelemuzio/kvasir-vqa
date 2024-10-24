@@ -12,7 +12,7 @@ import cv2 as cv
 import argparse
 import json
 from model import prepare_pretrained_model
-from dataset import kvasir_gradcam_class_names
+from dataset import feature_extractor_class_names
 
 activation = {}
 def get_activation(name):
@@ -25,8 +25,8 @@ load_dotenv()
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = 'cpu' 
 
-def init_feature_extractor(resnet='152', weights_path=os.getenv('KVASIR_GRADCAM_MODEL'), inference=True, device='cpu'):
-    class_names = kvasir_gradcam_class_names()
+def init_feature_extractor(resnet='152', weights_path=os.getenv('FEATURE_EXTRACTOR_MODEL'), inference=True, device='cpu'):
+    class_names = feature_extractor_class_names()
     num_classes = len(class_names)
 
     model = prepare_pretrained_model(resnet=resnet, num_classes=num_classes, inference=inference)
@@ -52,15 +52,15 @@ if __name__ == '__main__':
     freeze_layers = None
 
     if args.id is not None:
-        weights_path = f"{os.getenv('KVASIR_GRADCAM_RUNS')}/{args.id}/model.pt"
-        with open(f"{os.getenv('KVASIR_GRADCAM_RUNS')}/{args.id}/run.json", 'r') as file:
+        weights_path = f"{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{args.id}/model.pt"
+        with open(f"{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{args.id}/run.json", 'r') as file:
             data = json.load(file)
             if 'resnet' in data:
                 resnet = data['resnet']
             else:
                 resnet = os.getenv('RESNET')
     else:
-        weights_path = os.getenv('KVASIR_GRADCAM_MODEL')
+        weights_path = os.getenv('FEATURE_EXTRACTOR_MODEL')
         resnet = os.getenv('RESNET')    
     
     # target_layers = [model.layer4]
