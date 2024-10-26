@@ -5,39 +5,36 @@ import numpy as np
 from PIL import Image
 from torch import nn
 import torchvision
-from pytorch_grad_cam.utils.image import (
-    show_cam_on_image, deprocess_image, preprocess_image
-)
+from pytorch_grad_cam.utils.image import (preprocess_image)
 import cv2 as cv
 import argparse
 import json
-from model import prepare_pretrained_model
-from dataset import feature_extractor_class_names
-
-activation = {}
-def get_activation(name):
-    def hook(model, input, output):
-        activation[name] = output.detach()
-    return hook
-
+from model import init_feature_extractor
+ 
 load_dotenv()
 
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = 'cpu' 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def init_feature_extractor(resnet='152', weights_path=os.getenv('FEATURE_EXTRACTOR_MODEL'), inference=True, device='cpu'):
-    class_names = feature_extractor_class_names()
-    num_classes = len(class_names)
+def get_feature_extractor(run_id=None):
+    weights_path = None
+    model_name = None
 
-    model = prepare_pretrained_model(resnet=resnet, num_classes=num_classes, inference=inference)
+    if run_id is not None:
+        weights_path = f"{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{run_id}/model.pt"
+        with open(f"{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{run_id}/run.json", 'r') as file:
+            data = json.load(file)
+            if 'model' in data:
+                model_name = data['model']
+            else:
+                model_name = os.getenv('FEATURE_EXTRACTOR')
+    else:
+        weights_path = os.getenv('FEATURE_EXTRACTOR_MODEL')
+        model_name = os.getenv('FEATURE_EXTRACTOR') 
 
-    model.load_state_dict(torch.load(weights_path))
-
-    feature_extractor = torch.nn.Sequential(*list(model.children())[:-1])
-
-    feature_extractor.to(device)
+    feature_extractor = init_feature_extractor(model_name=model_name, weights_path=weights_path, device=device)
 
     return feature_extractor
+    
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -46,22 +43,9 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    weights_path = None
+    run_id = args.id or None
 
-    resnet = None
-    freeze_layers = None
-
-    if args.id is not None:
-        weights_path = f"{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{args.id}/model.pt"
-        with open(f"{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{args.id}/run.json", 'r') as file:
-            data = json.load(file)
-            if 'resnet' in data:
-                resnet = data['resnet']
-            else:
-                resnet = os.getenv('RESNET')
-    else:
-        weights_path = os.getenv('FEATURE_EXTRACTOR_MODEL')
-        resnet = os.getenv('RESNET')    
+    feature_extractor = get_feature_extractor(run_id)
     
     # target_layers = [model.layer4]
 
@@ -74,8 +58,6 @@ if __name__ == '__main__':
                                     std=[0.229, 0.224, 0.225]).to(device)
     
     # SEZIONE FEATURE EXTR
-
-    feature_extractor = get_feature_extractor(weights_path=weights_path, resnet=resnet, inference=True)
 
     output = feature_extractor(input_tensor)
 

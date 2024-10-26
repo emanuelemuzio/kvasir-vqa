@@ -5,7 +5,7 @@ from datetime import datetime
 import logging
 import os
 import torch.nn as nn
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoModel
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 import torch
@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 from torcheval.metrics.functional import multiclass_accuracy
 from datetime import datetime
 import logging
-from dataset import label2id_list
+from dataset import label2id_list, feature_extractor_class_names
 
 now = datetime.now()
 now = now.strftime("%Y-%m-%d")
@@ -33,6 +33,12 @@ logging.basicConfig(
 load_dotenv()
 
 '''
+|----------------------|
+|IMAGE FEATURES SECTION|
+|----------------------|
+'''
+
+'''
 Function for retrieving the base model for either inference or training.
 The model name is passed from the parameters.
 
@@ -43,7 +49,7 @@ Train only top layer = 1
 Train all layers = 2
 '''
 
-def prepare_model(model_name='resnet152', num_classes=0, freeze='2'):
+def get_feature_extractor_model(model_name='resnet152', num_classes=0, freeze='2'):
     
     model = None
 
@@ -98,15 +104,6 @@ def prepare_model(model_name='resnet152', num_classes=0, freeze='2'):
                 param.requires_grad = True
 
     return model
-
-'''
-Small utility function for recovering the tokenizer used for the NLP embeddings
-'''
-
-def get_tokenizer(model_name=os.getenv('TOKENIZER')):
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    
-    return tokenizer
 
 '''
 Evaluation function for the feature extractor, which includes both the train step and the validation
@@ -208,7 +205,7 @@ def feature_extractor_train(model, train_dataset, criterion, optimizer, class_na
     for i, (img, label, __, _) in enumerate(train_dataset):
 
         img = img.to(device)
-        label = (label2id_list(label, class_names)).to(device)
+        label = (torch.tensor((label2id_list(label, class_names)))).to(device)
 
         optimizer.zero_grad()
 
@@ -245,7 +242,7 @@ def feature_extractor_val(model, val_dataset, criterion, optimizer, class_names,
     with torch.no_grad():
         for i, (img, label, _, _) in enumerate(val_dataset):
             img = img.unsqueeze(0).to(device)[0]
-            label = (label2id_list(label, class_names)).to(device)
+            label = (torch.tensor((label2id_list(label, class_names)))).to(device)
 
             optimizer.zero_grad()
 
@@ -267,3 +264,73 @@ def feature_extractor_val(model, val_dataset, criterion, optimizer, class_names,
             scheduler.step(val_loss)
 
         return val_loss, val_acc 
+    
+'''
+Retrieve the model by name, load the weights and extract intermediate features 
+from specific layers.
+
+'''
+
+def init_feature_extractor(model_name='resnet152', weights_path=os.getenv('FEATURE_EXTRACTOR_MODEL'), device='cpu'):
+    class_names = feature_extractor_class_names()
+    num_classes = len(class_names)
+
+    model = get_feature_extractor_model(model_name=model_name, num_classes=num_classes)
+
+    model.load_state_dict(torch.load(weights_path))
+
+    feature_extractor = None
+
+    if model_name.startswith('resnet'):
+        feature_extractor = torch.nn.Sequential(*list(model.children())[:-1])
+    # elif model_name.startswith('vgg'):
+    #   do vgg...
+
+    feature_extractor.to(device)
+
+    return feature_extractor
+
+'''
+|--------------------------|
+|QUESTION EMBEDDING SECTION|
+|--------------------------|
+'''
+
+'''
+Tokenizer inizialization function
+'''
+
+def get_tokenizer(model_name=os.getenv('LANGUAGE_MODEL')):
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    
+    return tokenizer
+
+'''
+Small utility function for recovering the model used for the word embeddings
+'''
+
+def get_language_model(model_name=os.getenv('LANGUAGE_MODEL')):
+    model = AutoModel.from_pretrained(model_name)
+
+    return model
+
+'''
+Question embedding function
+'''
+
+def embed_question(question : str, tokenizer=None, model=None):
+    model_name = os.getenv('LANGUAGE_MODEL')
+
+    tokenizer = tokenizer or get_tokenizer(model_name=model_name)
+    model = model or get_language_model(model_name=model_name)
+
+    max_length = os.getenv('MAX_QUESTION_LENGTH')
+    inputs = tokenizer(question, add_special_tokens=True, return_tensors='pt', padding='max_length', max_length=max_length, truncation=True)
+
+    input_ids = inputs['input_ids']
+    attention_mask = inputs['attention_mask']
+
+    outputs = model(input_ids, attention_mask=attention_mask)   
+    word_embeddings = outputs.last_hidden_state
+
+    return word_embeddings

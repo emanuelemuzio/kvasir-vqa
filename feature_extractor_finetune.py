@@ -10,8 +10,8 @@ import shutil
 import logging
 from callback import EarlyStopper
 from util import generate_run_id
-from dataset import Kvasir, prepare_data, df_train_test_split, feature_extractor_class_names
-from model import prepare_model, feature_extractor_evaluate
+from dataset import FeatureExtractor, prepare_feature_extractor_data, df_train_test_split, feature_extractor_class_names
+from model import get_feature_extractor_model, feature_extractor_evaluate
 from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR
 import argparse
 from plot_generator import plot_run
@@ -63,7 +63,7 @@ if __name__ == '__main__':
 
     run_id = generate_run_id()
 
-    dataset = prepare_data(os.getenv('FEATURE_EXTRACTOR_CSV_AUG'), aug=True)    
+    dataset = prepare_feature_extractor_data(os.getenv('FEATURE_EXTRACTOR_CSV_AUG'), aug=True)    
 
     class_names = feature_extractor_class_names()
     
@@ -71,14 +71,14 @@ if __name__ == '__main__':
 
     logging.info('Building dataloaders...')
     
-    train_dataset = Kvasir(
+    train_dataset = FeatureExtractor(
         train_set['path'].to_numpy(), 
         train_set['label'].to_numpy(), 
         train_set['code'].to_numpy(), 
         train_set['bbox'].to_numpy(), 
         train=True)
     
-    val_dataset = Kvasir(
+    val_dataset = FeatureExtractor(
         val_set['path'].to_numpy(), 
         val_set['label'].to_numpy(), 
         val_set['code'].to_numpy(), 
@@ -89,7 +89,7 @@ if __name__ == '__main__':
 
     logging.info('Recovering base model...')
 
-    pretrained_model = prepare_model(model_name=model, num_classes=num_classes, freeze=freeze)
+    pretrained_model = get_feature_extractor_model(model_name=model, num_classes=num_classes, freeze=freeze)
 
     if device == 'cuda':
         torch.compile(pretrained_model, 'max-autotune')

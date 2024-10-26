@@ -7,6 +7,7 @@ from torch.utils.data import Dataset
 from torchvision.transforms import v2
 import numpy as np
 import json
+import random
 from dotenv import load_dotenv
 from sklearn.utils import shuffle
 import logging
@@ -18,6 +19,12 @@ import torch
 
 now = datetime.now()
 now = now.strftime("%Y-%m-%d")
+
+random_seed = 42
+
+np.random.seed(random_seed)
+random.seed(random_seed)
+torch.manual_seed(random_seed)
 
 logging.basicConfig(
     filename=f"logs/{now}.log",
@@ -32,17 +39,65 @@ logging.basicConfig(
 
 load_dotenv()
 
-class Kvasir(Dataset):
+'''
+|---------------|
+|GENERIC SECTION|
+|---------------|
+'''
+
+'''
+Function for transforming an id to a label
+'''
+
+def id2label(idx : int, classes: list) -> str:
+    label = classes.keys()[classes.values().index(idx)]
+    return label  
+
+'''
+Function for transforming a list of ids to a list of labels
+'''
+
+def id2label_list(idx_list : list) -> list:
+    return list(map(id2label, idx_list))
+
+'''
+Function for transforming a single label to an id
+'''
+
+def label2id(label : str, classes: list) -> str:
+    return classes.index(label)
+
+'''
+Function for converting a label list to an id list
+'''
+
+def label2id_list(label_list : list, classes : list) -> list:
+    output = []
+
+    for label in label_list:
+        output.append(label2id(label, classes))
+
+    return output
+
+'''
+|----------------------|
+|IMAGE FEATURES SECTION|
+|----------------------|
+'''
+
+'''
+DataLoader for training the classifier on HyperKvasir and Kvasir Instrument
+'''
+
+class FeatureExtractor(Dataset):
     def __init__(self, path, label, code, bbox, train=False):  # Added parameter for the number of images per batch
         self.path = path
         self.label = label
         self.code = code
         self.bbox = bbox
-        # self.class_names = class_names
         self.transform = None
         self.train = train 
          
-        # Define transformations
         self.transform = transform()
         
         logging.info('Initialized Dataset')
@@ -60,19 +115,16 @@ class Kvasir(Dataset):
 
         if len(bbox) > 0:
             img = img[:, bbox[0]:bbox[1], bbox[2]:bbox[3]]
-            # img = ZeroPad2d(3)(img)
 
         transformed_image = self.transform(img.float())
 
-        # cv_img = transformed_image.permute(1, 2, 0).numpy()
-        # cv_img = cv.cvtColor(cv_img, cv.COLOR_BGR2RGB)
-
-        # cv.imshow('test', cv_img)
-        # cv.waitKey(0)
-        # cv.destroyAllWindows()
-        
         return transformed_image, label, path, code
     
+'''
+Utility function for handling the resulting .csv, in particular for the bounding
+box column
+'''
+
 def format_bbox(x):
     if x == '[]':
         return []
@@ -81,8 +133,16 @@ def format_bbox(x):
         bbox = [int(num) for num in split]
         return bbox
     
-# Prepare a Hyper-Kvasir df joint with Kvasir Instrument
-         
+'''
+Utility function that generates a json containing all the classes present in 
+the feature extractor training data in the form of a dictionary as follows:
+
+{
+    class: numerical_index
+}
+
+'''
+
 def generate_feature_extractor_classes_json(df : pd.DataFrame):
     class_names = df.label.unique()
 
@@ -94,10 +154,14 @@ def generate_feature_extractor_classes_json(df : pd.DataFrame):
     with open(os.getenv('FEATURE_EXTRACTOR_CLASSES'), 'w') as f:
         json.dump(classes, f)
 
-# def load_kvasir_vqa():
+'''
+Either loads the csv that contains all the images paths, labels and bounding boxes or
+create said csv.
+Optionally performs data augmentation on the images, applying random rotations and
+horizontal flips.
+'''
 
-
-def prepare_data(data_path, aug=False):
+def prepare_feature_extractor_data(data_path, aug=False):
     if os.path.exists(data_path):
         df = pd.read_csv(data_path)
 
@@ -257,7 +321,7 @@ def df_train_test_split(df : pd.DataFrame, test_size=0.2) -> pd.DataFrame:
 Download the KVASIR-VQA dataset, splitted in the metadata.csv file and the imgs
 '''
 
-def load() -> any:
+def load_kvasir_vqa() -> any:
     return load_dataset(os.getenv('KVASIR_VQA_DATASET'))
 
 '''
@@ -265,8 +329,8 @@ Utility function for retrieving the original Kvasir VQA dataset using the Huggin
 Hyper Kvasir and Kvasir Instrument classes are then remapped to match the classes present in Kvasir VQA.
 '''
 
-def retrieve_dataset() -> None:
-    dataset = load()
+def retrieve_kvasir_vqa_dataset() -> None:
+    dataset = load_kvasir_vqa()
     dataframe = dataset['raw'].select_columns(['source', 'question', 'answer', 'img_id']).to_pandas()
     
     if not os.path.exists(f"{os.getenv('KVASIR_VQA_METADATA')}/metadata.csv"):
@@ -299,40 +363,6 @@ Utility function for retrieving a list of classes.
 def feature_extractor_class_names() -> list:
     classes = feature_extractor_classes()
     return list(classes.keys())
-
-'''
-Function for transforming an id to a label
-'''
-
-def id2label(idx : int, classes: list) -> str:
-    label = classes.keys()[classes.values().index(idx)]
-    return label  
-
-'''
-Function for transforming a list of ids to a list of labels
-'''
-
-def id2label_list(idx_list : list) -> list:
-    return list(map(id2label, idx_list))
-
-'''
-Function for transforming a single label to an id
-'''
-
-def label2id(label : str, classes: list) -> str:
-    return classes.index(label)
-
-'''
-Function for converting a label list to an id list
-'''
-
-def label2id_list(label_list : list, classes : list) -> list:
-    output = []
-
-    for label in label_list:
-        output.append(label2id(label, classes))
-
-    return torch.tensor(output)
 
 '''
 Function for data image data augmentation. 
@@ -390,7 +420,7 @@ def transform() -> v2.Compose:
     return transform 
 
 def main():
-    retrieve_dataset()
+    retrieve_kvasir_vqa_dataset()
     
 if __name__ == '__main__':
     main()

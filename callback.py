@@ -15,6 +15,10 @@ logging.basicConfig(
     level=logging.INFO
 )
 
+'''
+Early stopper class with a patience mechanism that relies on validation loss delta over epochs
+'''
+
 class EarlyStopper:
     def __init__(self, patience=1, min_delta=0):
         self.patience = patience
