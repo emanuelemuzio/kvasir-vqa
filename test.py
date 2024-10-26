@@ -20,8 +20,8 @@ from dataset import feature_extractor_class_names
 
 load_dotenv()
 
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = 'cpu'
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = 'cpu'
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--id')
@@ -40,11 +40,11 @@ sentence = "Are there any instruments in the image? Check all that are present."
 test_img_path = "./data/kvasir-instrument/images/ckcu9jucf00083b5ytpqoue72.jpg"
 rgb_img = cv2.imread(test_img_path, 1)[:, :, ::-1]
 rgb_img = np.float32(rgb_img) / 255
-input_tensor = preprocess_image(rgb_img, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+input_tensor = preprocess_image(rgb_img, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]).to(device)
 
-feature_extractor_output = feature_extractor(input_tensor)
+feature_extractor_output = feature_extractor(input_tensor).squeeze()
 
-embedding = embed_question(sentence)
+embedding = embed_question(sentence, device=device)
 
 x = 1
 

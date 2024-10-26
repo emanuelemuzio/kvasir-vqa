@@ -88,6 +88,10 @@ def get_feature_extractor_model(model_name='resnet152', num_classes=0, freeze='2
         elif freeze == '2':
             for param in model.parameters():
                 param.requires_grad = True
+                
+    # if model_name.startswith('vit'):
+        # TODO
+        
     
     elif model_name.startswith('resnet'):
         
@@ -278,13 +282,16 @@ def init_feature_extractor(model_name='resnet152', weights_path=os.getenv('FEATU
     model = get_feature_extractor_model(model_name=model_name, num_classes=num_classes)
 
     model.load_state_dict(torch.load(weights_path))
+    
+    model.eval()
 
     feature_extractor = None
 
     if model_name.startswith('resnet'):
         feature_extractor = torch.nn.Sequential(*list(model.children())[:-1])
-    # elif model_name.startswith('vgg'):
-    #   do vgg...
+    elif model_name.startswith('vgg'):
+        model.classifier = model.classifier[:-1]
+        feature_extractor = model
 
     feature_extractor.to(device)
 
@@ -318,19 +325,89 @@ def get_language_model(model_name=os.getenv('LANGUAGE_MODEL')):
 Question embedding function
 '''
 
-def embed_question(question : str, tokenizer=None, model=None):
+def embed_question(question : str, tokenizer=None, model=None, device='cpu'):
     model_name = os.getenv('LANGUAGE_MODEL')
 
     tokenizer = tokenizer or get_tokenizer(model_name=model_name)
-    model = model or get_language_model(model_name=model_name)
+    model = model or get_language_model(model_name=model_name).to(device)
 
-    max_length = os.getenv('MAX_QUESTION_LENGTH')
-    inputs = tokenizer(question, add_special_tokens=True, return_tensors='pt', padding='max_length', max_length=max_length, truncation=True)
+    max_length = int(os.getenv('MAX_QUESTION_LENGTH'))
+    inputs = tokenizer(question, 
+                       add_special_tokens=True, 
+                       return_tensors='pt', 
+                       padding='max_length', 
+                       max_length=max_length, 
+                       truncation=True).to(device)
 
     input_ids = inputs['input_ids']
     attention_mask = inputs['attention_mask']
+    token_type_ids = inputs['token_type_ids']
 
-    outputs = model(input_ids, attention_mask=attention_mask)   
+    outputs = model(input_ids, attention_mask = attention_mask, token_type_ids = token_type_ids)   
     word_embeddings = outputs.last_hidden_state
+    
+    word_embeddings = word_embeddings[:,0,:].squeeze()
 
     return word_embeddings
+
+'''
+|-----------|
+|VQA SECTION|
+|-----------|
+'''
+
+class VQAClassifier(nn.Module):
+    def __init__(
+        self, 
+        feature_extractor,
+        tokenizer, 
+        question_encoder, 
+        multimodal_fusion_dim,
+        intermediate_dim, 
+        num_classes
+    ):
+        
+        super(VQAClassifier, self).__init__()
+            
+        self.feature_extractor = feature_extractor 
+        self.question_encoder = question_encoder
+        self.tokenizer = tokenizer
+        self.num_classes = num_classes
+            
+        self.multimodal_fusion = nn.Sequential(
+            nn.Linear(multimodal_fusion_dim, intermediate_dim),
+            nn.ReLU(),
+            nn.Dropout(0.5)
+        )
+            
+        self.classifier = nn.Sequential(
+            nn.Linear(768, self.num_classes),
+        )
+
+    def forward(self, question, preprocessed_image): 
+
+        max_length = int(os.getenv('MAX_QUESTION_LENGTH'))
+        inputs = self.tokenizer(question, 
+                        add_special_tokens=True, 
+                        return_tensors='pt', 
+                        padding='max_length', 
+                        max_length=max_length, 
+                        truncation=True)
+
+        input_ids = inputs['input_ids']
+        token_type_ids = inputs['token_type_ids']
+        attention_mask = inputs['attention_mask']
+
+        question_encoding = self.question_encoder(input_ids, attention_mask = attention_mask, token_type_ids = token_type_ids).last_hidden_state
+        
+        question_encoding = question_encoding[:,0,:].squeeze()
+        
+        image_feature = self.feature_extractor(preprocessed_image).squeeze()
+        
+        fused_output = torch.cat([image_feature, question_encoding])
+        
+        logits = self.classifier(fused_output)
+        
+        return {
+            'logits' : logits
+        }

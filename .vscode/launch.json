@@ -9,8 +9,8 @@
             "console": "integratedTerminal",
             "args": [
                 "--turnoff=0",
-                "--num_epochs=300",
-                "--batch_size=64",
+                "--num_epochs=100",
+                "--batch_size=16",
                 "--lr=0.0001",
                 "--momentum=0.9",
                 "--T_max=100",
@@ -22,7 +22,7 @@
                 "--mode=min",
                 "--weight_decay=0.01",
                 "--model=vgg16",
-                "--freeze=2"
+                "--freeze=1"
             ]
         },
         {
