@@ -1,4 +1,4 @@
-from model import embed_question
+from model import encode_question
 from dotenv import load_dotenv
 import os
 from feature_extractor import get_feature_extractor
@@ -44,7 +44,7 @@ input_tensor = preprocess_image(rgb_img, mean=[0.485, 0.456, 0.406], std=[0.229,
 
 feature_extractor_output = feature_extractor(input_tensor).squeeze()
 
-embedding = embed_question(sentence, device=device)
+embedding = encode_question(sentence, device=device)
 
 x = 1
 

@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from torchvision import models
 from datetime import datetime
 import logging
+from sklearn.preprocessing import LabelEncoder
 import os
 import torch.nn as nn
 from transformers import AutoTokenizer, AutoModel
@@ -14,7 +15,8 @@ from dotenv import load_dotenv
 from torcheval.metrics.functional import multiclass_accuracy
 from datetime import datetime
 import logging
-from dataset import label2id_list, feature_extractor_class_names
+from dataset import label2id_list, feature_extractor_class_names, KvasirVQA
+from callback import EarlyStopper
 
 now = datetime.now()
 now = now.strftime("%Y-%m-%d")
@@ -87,12 +89,8 @@ def get_feature_extractor_model(model_name='resnet152', num_classes=0, freeze='2
         
         elif freeze == '2':
             for param in model.parameters():
-                param.requires_grad = True
+                param.requires_grad = True 
                 
-    # if model_name.startswith('vit'):
-        # TODO
-        
-    
     elif model_name.startswith('resnet'):
         
         if freeze == '0':
@@ -322,10 +320,10 @@ def get_language_model(model_name=os.getenv('LANGUAGE_MODEL')):
     return model
 
 '''
-Question embedding function
+Question encode function
 '''
 
-def embed_question(question : str, tokenizer=None, model=None, device='cpu'):
+def encode_question(question : str, tokenizer=None, model=None, device='cpu'):
     model_name = os.getenv('LANGUAGE_MODEL')
 
     tokenizer = tokenizer or get_tokenizer(model_name=model_name)
@@ -359,12 +357,12 @@ def embed_question(question : str, tokenizer=None, model=None, device='cpu'):
 class VQAClassifier(nn.Module):
     def __init__(
         self, 
+        vocabulary_size : int,
+        multimodal_fusion_dim : int,
+        intermediate_dim : int, 
         feature_extractor,
-        tokenizer, 
-        question_encoder, 
-        multimodal_fusion_dim,
-        intermediate_dim, 
-        num_classes
+        tokenizer : AutoTokenizer, 
+        question_encoder : AutoModel
     ):
         
         super(VQAClassifier, self).__init__()
@@ -372,7 +370,7 @@ class VQAClassifier(nn.Module):
         self.feature_extractor = feature_extractor 
         self.question_encoder = question_encoder
         self.tokenizer = tokenizer
-        self.num_classes = num_classes
+        self.vocabulary_size = vocabulary_size
             
         self.multimodal_fusion = nn.Sequential(
             nn.Linear(multimodal_fusion_dim, intermediate_dim),
@@ -381,7 +379,7 @@ class VQAClassifier(nn.Module):
         )
             
         self.classifier = nn.Sequential(
-            nn.Linear(768, self.num_classes),
+            nn.Linear(768, self.vocabulary_size),
         )
 
     def forward(self, question, preprocessed_image): 
@@ -411,3 +409,200 @@ class VQAClassifier(nn.Module):
         return {
             'logits' : logits
         }
+        
+def get_vqa_classifier(language_model=os.getenv('LANGUAGE_MODEL'), feature_extractor_name=None, vocabulary_size=0):
+    class_names = feature_extractor_class_names()
+    
+    multimodal_fusion_dim = 0
+    
+    intermediate_dim = int(os.getenv('CLASSIFIER_INTERMEDIATE_DIM'))
+    
+    if feature_extractor_name.startswith('resnet'):
+        multimodal_fusion_dim = int(os.getenv('EMBEDDING_SIZE')) + int(os.getenv('RESNET_FEATURE_SIZE'))
+    elif feature_extractor_name.startswith('vgg'):
+        multimodal_fusion_dim = int(os.getenv('EMBEDDING_SIZE')) + int(os.getenv('VGG_FEATURE_SIZE'))
+    
+    tokenizer = get_tokenizer(language_model)
+    question_encoder = get_language_model(language_model)
+    feature_extractor = get_feature_extractor_model(model_name=feature_extractor_name, num_classes=len(class_names), freeze='0')
+    
+    classifier = VQAClassifier(
+        vocabulary_size=vocabulary_size,
+        multimodal_fusion_dim=multimodal_fusion_dim,
+        intermediate_dim=intermediate_dim,
+        feature_extractor=feature_extractor,
+        tokenizer=tokenizer,
+        question_encoder=question_encoder
+    )
+    
+    return classifier
+
+'''
+Evaluation function for the feature extractor, which includes both the train step and the validation
+step for each epoch.
+'''
+
+def classifier_evaluate(model : VQAClassifier, 
+            num_epochs : int, 
+            batch_size : int, 
+            optimizer : torch.optim, 
+            scheduler : torch.optim.lr_scheduler,
+            scheduler_name : str,
+            device : str, 
+            train_dataset : DataLoader, 
+            val_dataset : DataLoader, 
+            criterion : torch.nn, 
+            early_stopper : EarlyStopper, 
+            answer_encoder : LabelEncoder,
+            train_loss_ckp = [],
+            train_acc_ckp = [],
+            val_loss_ckp = [],
+            val_acc_ckp = [],
+            best_acc_ckp = - np.inf,
+            start_epoch = 1,
+            run_id='test',
+            logging=None):
+    
+    logging.info('Starting model evaluation')
+
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
+    
+    train_loss = []
+    val_loss = []
+
+    train_acc = []
+    val_acc = []
+    best_acc = - np.inf
+    best_weights = None
+
+    if train_loss_ckp is not None:
+        logging.info(f'Loading {run_id} checkpoint')
+        train_loss += train_loss_ckp
+        train_acc += train_acc_ckp
+        val_loss += val_loss_ckp
+        val_acc += val_acc_ckp
+        best_acc = best_acc_ckp
+        early_stopper.min_validation_loss = min(val_loss)
+
+    # Ciclo di addestramento
+
+    for epoch in tqdm(range(start_epoch, num_epochs + 1)):
+        torch.cuda.empty_cache()
+        epoch_train_loss, epoch_train_acc = classifier_train(model, train_dataloader, criterion, optimizer, answer_encoder, device, scheduler, scheduler_name)
+        train_loss.append(epoch_train_loss)
+        train_acc.append(epoch_train_acc)
+        
+        epoch_val_loss, epoch_val_acc = classifier_val(model, val_dataloader, criterion, optimizer, answer_encoder, device, scheduler, scheduler_name)
+        val_loss.append(epoch_val_loss)
+        val_acc.append(epoch_val_acc)
+        
+        logging.info(f"Epoch [{epoch}/{num_epochs}] Train Loss: {epoch_train_loss:.4f}  Validation Loss: {epoch_val_loss:.4f}, Validation Accuracy: {epoch_val_acc*100:.2f}%")
+
+        print(f"Epoch [{epoch}/{num_epochs}] Train Loss: {epoch_train_loss:.4f}  Validation Loss: {epoch_val_loss:.4f}, Validation Accuracy: {epoch_val_acc*100:.2f}%")
+        
+        if epoch_val_acc > best_acc:
+            best_acc = epoch_val_acc
+            best_weights = model.state_dict()
+
+            torch.save({
+                'model_state_dict' : best_weights,
+                'num_epochs' : epoch,
+                'train_loss' : train_loss,
+                'train_acc' : train_acc,
+                'val_loss' : val_loss,
+                'val_acc' : val_acc,
+                'best_acc' : best_acc,
+                'run_id' : run_id
+            }, os.getenv('CLASSIFIER_CHECKPOINT')) 
+
+            logging.info('Checkpoint reached')
+            
+        if early_stopper.early_stop(epoch_val_loss):
+            logging.info('Early stop activating')
+            break
+            
+    return train_loss, train_acc, val_loss, val_acc, best_acc, best_weights
+
+'''
+Classifier train step function
+'''
+
+def classifier_train(
+    model : VQAClassifier, 
+    train_dataset : KvasirVQA, 
+    criterion : torch.nn, 
+    optimizer : torch.optim, 
+    answer_encoder : LabelEncoder, 
+    device : str, 
+    scheduler : torch.optim.lr_scheduler, 
+    scheduler_name : str
+    ):
+    
+    model.train()
+
+    train_loss = 0.0
+    train_acc = 0.0
+
+    for i, (img, question, answer) in enumerate(train_dataset):
+
+        img = img.to(device)
+        target = (torch.tensor(answer_encoder.transform(answer))).to(device)
+
+        optimizer.zero_grad()
+
+        output = model(question, img)
+
+        loss = criterion(output, target)
+
+        loss.backward()
+
+        optimizer.step() 
+        
+        acc = multiclass_accuracy(output, label) 
+        train_acc += acc.item()
+        train_loss += loss.item()
+
+    if scheduler_name == 'cosine':
+        scheduler.step()
+
+    train_loss = train_loss / len(train_dataset)
+    train_acc = train_acc / len(train_dataset)
+
+    return train_loss, train_acc
+
+'''
+Classifier validation step
+'''
+
+def classifier_val(model, val_dataset, criterion, optimizer, class_names, device, scheduler, scheduler_name):
+    # Evaluate the model on the validation set
+    model.eval()
+    val_loss = 0.0
+    val_acc = 0.0
+        
+    with torch.no_grad():
+        for i, (img, label, _, _) in enumerate(val_dataset):
+            img = img.unsqueeze(0).to(device)[0]
+            label = (torch.tensor((label2id_list(label, class_names)))).to(device)
+
+            optimizer.zero_grad()
+
+            output = model(img)
+
+            loss = criterion(output, label)
+            
+            acc = multiclass_accuracy(output, label)
+            val_acc += acc.item()
+            val_loss += loss.item()
+
+        # Calculate validation loss
+        val_loss /= len(val_dataset)
+
+        # Calculate validation accuracy
+        val_acc = val_acc / len(val_dataset)
+        
+        if scheduler_name == 'plateau':
+            scheduler.step(val_loss)
+
+        return val_loss, val_acc 

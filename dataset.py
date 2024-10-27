@@ -57,8 +57,13 @@ def id2label(idx : int, classes: list) -> str:
 Function for transforming a list of ids to a list of labels
 '''
 
-def id2label_list(idx_list : list) -> list:
-    return list(map(id2label, idx_list))
+def id2label_list(idx_list : list, classes : list) -> list:
+    output = []
+
+    for idx in idx_list:
+        output.append(id2label(idx, classes))
+
+    return output
 
 '''
 Function for transforming a single label to an id
@@ -78,6 +83,20 @@ def label2id_list(label_list : list, classes : list) -> list:
         output.append(label2id(label, classes))
 
     return output
+
+'''
+Utility function for splitting a Dataframe in two sets, 
+by simply taking a user defined % of the dataset.
+'''
+
+def df_train_test_split(df : pd.DataFrame, test_size=0.2) -> pd.DataFrame:
+    msk = np.random.rand(len(df)) < test_size
+    train_set = df[~msk]
+    test_set = df[msk]
+
+    logging.info('Df split')
+    
+    return train_set, test_set
 
 '''
 |----------------------|
@@ -304,46 +323,6 @@ def prepare_feature_extractor_data(data_path, aug=False):
     return df
 
 '''
-Utility function for splitting a Dataframe in two sets, 
-by simply taking a user defined % of the dataset.
-'''
-
-def df_train_test_split(df : pd.DataFrame, test_size=0.2) -> pd.DataFrame:
-    msk = np.random.rand(len(df)) < test_size
-    train_set = df[~msk]
-    test_set = df[msk]
-
-    logging.info('Df split')
-    
-    return train_set, test_set
-
-'''
-Download the KVASIR-VQA dataset, splitted in the metadata.csv file and the imgs
-'''
-
-def load_kvasir_vqa() -> any:
-    return load_dataset(os.getenv('KVASIR_VQA_DATASET'))
-
-'''
-Utility function for retrieving the original Kvasir VQA dataset using the HuggingFace Loader.
-Hyper Kvasir and Kvasir Instrument classes are then remapped to match the classes present in Kvasir VQA.
-'''
-
-def retrieve_kvasir_vqa_dataset() -> None:
-    dataset = load_kvasir_vqa()
-    dataframe = dataset['raw'].select_columns(['source', 'question', 'answer', 'img_id']).to_pandas()
-    
-    if not os.path.exists(f"{os.getenv('KVASIR_VQA_METADATA')}/metadata.csv"):
-        print('[LOG] Retrieving metadata.csv for Kvasir VQA')
-        dataframe.to_csv(f"{os.getenv('KVASIR_VQA_METADATA')}/metadata.csv", index=False)
-        
-    if not os.path.exists(f"{os.getenv('KVASIR_VQA_DATA')}"):
-        print('[LOG] Retrieving Kvasir VQA data')
-        os.makedirs(f"{os.getenv('KVASIR_VQA_DATA')}", exist_ok=True)
-        for i, row in dataframe.groupby('img_id').nth(0).iterrows(): # for images
-            dataset['raw'][i]['image'].save(f"{os.getenv('KVASIR_VQA_DATA')}/{row['img_id']}.jpg")
-
-'''
 Utility function for loading the JSON file containing the mapping for the classes, in the form of:
 {
     class: id
@@ -418,6 +397,70 @@ def transform() -> v2.Compose:
     ])
 
     return transform 
+
+'''
+|------------------|
+|KVASIR VQA SECTION|
+|------------------|
+'''
+
+'''
+Download the KVASIR-VQA dataset, splitted in the metadata.csv file and the imgs
+'''
+
+def load_kvasir_vqa() -> any:
+    return load_dataset(os.getenv('KVASIR_VQA_DATASET'))
+
+'''
+Utility function for retrieving the original Kvasir VQA dataset using the HuggingFace Loader.
+Hyper Kvasir and Kvasir Instrument classes are then remapped to match the classes present in Kvasir VQA.
+'''
+
+def retrieve_kvasir_vqa_dataset() -> None:
+    dataset = load_kvasir_vqa()
+    dataframe = dataset['raw'].select_columns(['source', 'question', 'answer', 'img_id']).to_pandas()
+    
+    if not os.path.exists(f"{os.getenv('KVASIR_VQA_METADATA')}/metadata.csv"):
+        print('[LOG] Retrieving metadata.csv for Kvasir VQA')
+        dataframe.to_csv(f"{os.getenv('KVASIR_VQA_METADATA')}/metadata.csv", index=False)
+        
+    if not os.path.exists(f"{os.getenv('KVASIR_VQA_DATA')}"):
+        print('[LOG] Retrieving Kvasir VQA data')
+        os.makedirs(f"{os.getenv('KVASIR_VQA_DATA')}", exist_ok=True)
+        for i, row in dataframe.groupby('img_id').nth(0).iterrows(): # for images
+            dataset['raw'][i]['image'].save(f"{os.getenv('KVASIR_VQA_DATA')}/{row['img_id']}.jpg")
+
+class KvasirVQA(Dataset):
+    def __init__(self, source, question, answer, img_id, base_path):  
+        
+        self.source = source
+        self.question = question
+        self.answer = answer
+        self.img_id = img_id
+        self.base_path = base_path
+         
+        self.transform = transform()
+        
+        logging.info('Initialized Kvasir VQA Dataset')
+    
+    def __len__(self):
+        return len(self.source)
+
+    def __getitem__(self, idx):
+        
+        # source = self.source[idx]
+        question = self.question[idx]
+        answer = self.answer[idx]
+        img_id = self.img_id[idx]
+        
+        base_path = self.base_path
+        
+        full_path = f"{base_path}/{img_id}.jpg"
+        img = read_image(full_path)         
+
+        transformed_image = self.transform(img.float())
+
+        return transformed_image, question, answer
 
 def main():
     retrieve_kvasir_vqa_dataset()

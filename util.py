@@ -1,5 +1,7 @@
 from datetime import datetime
 import logging
+import os
+import json
 
 now = datetime.now()
 now = now.strftime("%Y-%m-%d")
@@ -68,3 +70,9 @@ def get_common_subsequences(strings : list) -> list:
         sorted_subsequences += grouped
         
     return sorted_subsequences 
+
+def get_run_info(run_path : str):
+    f = open(run_path)
+    data = json.load(f)
+
+    return data

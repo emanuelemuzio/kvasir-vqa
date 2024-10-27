@@ -1,5 +1,6 @@
 import os
 import torch
+import pandas as pd
 import json
 from dotenv import load_dotenv
 from torch import optim
@@ -9,12 +10,13 @@ from datetime import datetime
 import shutil
 import logging
 from callback import EarlyStopper
-from util import generate_run_id
-from dataset import FeatureExtractor, prepare_feature_extractor_data, df_train_test_split, feature_extractor_class_names
-from model import get_feature_extractor_model, feature_extractor_evaluate
+from util import get_run_info, generate_run_id
+from dataset import KvasirVQA, df_train_test_split
+from model import get_vqa_classifier, classifier_evaluate
 from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR
 import argparse
 from plot_generator import plot_run
+from sklearn.preprocessing import LabelEncoder
 
 now = datetime.now()
 now = now.strftime("%Y-%m-%d")
@@ -50,49 +52,62 @@ if __name__ == '__main__':
     parser.add_argument('--scheduler', help="'cosine', 'plateau' or 'linear'")
     parser.add_argument('--optimizer', help="'sgd', 'adam' or 'adamw")
     parser.add_argument('--weight_decay', help="1e-2 or 1e-3")
-    parser.add_argument('--model', help="'resnet50', 'resnet101', 'resnet152' or 'vgg16'")
-    parser.add_argument('--freeze', help="'0' for inference, '1' for training only the top layer or '2' for training the entire model")
+    parser.add_argument('--feature_extractor', help="use the run id in order to retrieve automatically the backbone used for the feature extraction")
+    # parser.add_argument('--freeze', help="'0' for inference, '1' for training only the top layer or '2' for training the entire model")
 
     args = parser.parse_args()
+    
+    feature_extractor_run_path = f"{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{args.feature_extractor}/run.json"
+    
+    feature_extractor_name = get_run_info(run_path=feature_extractor_run_path)['model'] 
+    
+    run_id = generate_run_id()
 
     turnoff = int(args.turnoff)
 
-    freeze = args.freeze or '2'
+    logging.info('Recovering classifier model...')
 
-    model = args.model or 'resnet152'
+    model = get_vqa_classifier(feature_extractor_name=feature_extractor_name)
 
-    run_id = generate_run_id()
-
-    dataset = prepare_feature_extractor_data(os.getenv('FEATURE_EXTRACTOR_CSV_AUG'), aug=True)    
-
-    class_names = feature_extractor_class_names()
+    df = pd.read_csv(os.getenv('KVASIR_VQA_CSV'))  
     
-    train_set, val_set = df_train_test_split(dataset, 0.2) 
+    df.dropna(axis=0, inplace=True)
+    
+    train_set, val_set = df_train_test_split(df, 0.3) 
+    val_set, test_set = df_train_test_split(df, 0.5) 
 
     logging.info('Building dataloaders...')
     
-    train_dataset = FeatureExtractor(
-        train_set['path'].to_numpy(), 
-        train_set['label'].to_numpy(), 
-        train_set['code'].to_numpy(), 
-        train_set['bbox'].to_numpy(), 
-        train=True)
+    train_dataset = KvasirVQA(
+        train_set['source'].to_numpy(), 
+        train_set['question'].to_numpy(), 
+        train_set['answer'].to_numpy(), 
+        train_set['img_id'].to_numpy(),
+        os.getenv('KVASIR_VQA_DATA')
+        )
     
-    val_dataset = FeatureExtractor(
-        val_set['path'].to_numpy(), 
-        val_set['label'].to_numpy(), 
-        val_set['code'].to_numpy(), 
-        val_set['bbox'].to_numpy(), 
-        train=False) 
-
-    num_classes = len(class_names)
-
-    logging.info('Recovering base model...')
-
-    pretrained_model = get_feature_extractor_model(model_name=model, num_classes=num_classes, freeze=freeze)
+    val_dataset = KvasirVQA(
+        val_set['source'].to_numpy(), 
+        val_set['question'].to_numpy(), 
+        val_set['answer'].to_numpy(), 
+        val_set['img_id'].to_numpy(),
+        os.getenv('KVASIR_VQA_DATA')
+        )
+    
+    test_dataset = KvasirVQA(
+        test_set['source'].to_numpy(), 
+        test_set['question'].to_numpy(), 
+        test_set['answer'].to_numpy(), 
+        test_set['img_id'].to_numpy(),
+        os.getenv('KVASIR_VQA_DATA')
+        ) 
+    
+    answers = list(set(df['answer']))
+    
+    answer_encoder = LabelEncoder().fit(answers)
 
     if device == 'cuda':
-        torch.compile(pretrained_model, 'max-autotune')
+        torch.compile(model, 'max-autotune')
 
     logging.info('Declaring hyper parameters')
     
@@ -125,11 +140,11 @@ if __name__ == '__main__':
     optimizer = None
 
     if args.optimizer == 'sgd':
-        optimizer = optim.SGD(pretrained_model.parameters(), lr=lr, momentum=momentum)
+        optimizer = optim.SGD(model.parameters(), lr=lr, momentum=momentum)
     elif args.optimizer == 'adam':
-        optimizer = optim.Adam(pretrained_model.parameters(), lr=lr, weight_decay=weight_decay)
+        optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     elif args.optimizer == 'adamw':
-        optimizer = optim.AdamW(pretrained_model.parameters(), lr=lr, weight_decay=weight_decay)
+        optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
         
     early_stopper = EarlyStopper(patience=patience, min_delta=min_delta)
 
@@ -142,7 +157,7 @@ if __name__ == '__main__':
     elif args.scheduler == 'linear':
         scheduler = LinearLR(optimizer=optimizer)
 
-    pretrained_model.to(device)
+    model.to(device)
 
     train_loss_ckp = None
     train_acc_ckp = None
@@ -153,9 +168,9 @@ if __name__ == '__main__':
 
     run_path = None
     
-    if os.path.exists(os.getenv('FEATURE_EXTRACTOR_CHECKPOINT')):
-        checkpoint = torch.load(os.getenv('FEATURE_EXTRACTOR_CHECKPOINT'), weights_only=True)
-        pretrained_model.load_state_dict(checkpoint['model_state_dict'])
+    if os.path.exists(os.getenv('CLASSIFIER_CHECKPOINT')):
+        checkpoint = torch.load(os.getenv('CLASSIFIER_CHECKPOINT'), weights_only=True)
+        model.load_state_dict(checkpoint['model_state_dict'])
         start_epoch = checkpoint['num_epochs']
         train_loss_ckp = checkpoint['train_loss']
         train_acc_ckp = checkpoint['train_acc']
@@ -163,17 +178,17 @@ if __name__ == '__main__':
         val_acc_ckp = checkpoint['val_acc']
         best_acc_ckp = checkpoint['best_acc']
         run_id = checkpoint['run_id']
-        run_path = f"{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{run_id}"
+        run_path = f"{os.getenv('CLASSIFIER_RUNS')}/{run_id}"
         logging.info(f'Loaded run {run_id} checkpoint')
     else:
         logging.info(f'New run: {run_id}')
-        run_path = f"{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{run_id}"
+        run_path = f"{os.getenv('CLASSIFIER_RUNS')}/{run_id}"
         os.mkdir(run_path)
 
     logging.info('Starting model evaluation')
 
-    train_loss, train_acc, val_loss, val_acc, best_acc, best_weights = feature_extractor_evaluate(
-        model=pretrained_model, 
+    train_loss, train_acc, val_loss, val_acc, best_acc, best_weights = classifier_evaluate(
+        model=model, 
         num_epochs=num_epochs, 
         batch_size=batch_size,
         optimizer=optimizer, 
@@ -184,7 +199,7 @@ if __name__ == '__main__':
         val_dataset=val_dataset, 
         criterion=criterion, 
         early_stopper=early_stopper, 
-        class_names=class_names,
+        answer_encoder=answer_encoder,
         train_loss_ckp = train_loss_ckp,
         train_acc_ckp = train_acc_ckp,
         val_loss_ckp = val_loss_ckp,
@@ -208,31 +223,31 @@ if __name__ == '__main__':
         config['run_id'] = run_id
         json.dump(config, f)
 
-    os.remove(os.getenv('FEATURE_EXTRACTOR_CHECKPOINT'))
+    os.remove(os.getenv('CLASSIFIER_CHECKPOINT'))
 
-    runs = os.listdir(f"{os.getenv('FEATURE_EXTRACTOR_RUNS')}")
+    runs = os.listdir(f"{os.getenv('CLASSIFIER_RUNS')}")
     best_run = None
 
     if len(runs) > 0:
         runs_best_acc = 0
         for run in runs:
-            if os.path.exists(f"{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{run}/run.json"):
-                with open(f"{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{run}/run.json", 'r') as f:
+            if os.path.exists(f"{os.getenv('CLASSIFIER_RUNS')}/{run}/run.json"):
+                with open(f"{os.getenv('CLASSIFIER_RUNS')}/{run}/run.json", 'r') as f:
                     data = json.load(f)
                     runs_best_acc = data['best_acc'] if data['best_acc'] > runs_best_acc else runs_best_acc
                     best_run = run
-        if os.path.exists(f"{os.getenv('FEATURE_EXTRACTOR_MODEL')}"):
-            os.remove(f"{os.getenv('FEATURE_EXTRACTOR_MODEL')}")
+        if os.path.exists(f"{os.getenv('CLASSIFIER_MODEL')}"):
+            os.remove(f"{os.getenv('CLASSIFIER_MODEL')}")
         
-        shutil.copyfile(f"{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{run}/model.pt", 
-                        f"{os.getenv('FEATURE_EXTRACTOR_MODEL')}")
+        shutil.copyfile(f"{os.getenv('CLASSIFIER_RUNS')}/{run}/model.pt", 
+                        f"{os.getenv('CLASSIFIER_MODEL')}")
         
-        shutil.copyfile(f"{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{run}/run.json", 
-                        f"{os.getenv('FEATURE_EXTRACTOR_RUN')}")
+        shutil.copyfile(f"{os.getenv('CLASSIFIER_RUNS')}/{run}/run.json", 
+                        f"{os.getenv('CLASSIFIER_RUN')}")
         
         logging.info(f'New best run: {best_run}')
 
-    plot_run(base_path=os.getenv('FEATURE_EXTRACTOR_RUNS'), run_id=run_id)
+    plot_run(base_path=os.getenv('CLASSIFIER_RUNS'), run_id=run_id)
 
     if turnoff >= 0:
         os.system(f"shutdown /s /t {turnoff}")
