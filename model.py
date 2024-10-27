@@ -288,6 +288,7 @@ def init_feature_extractor(model_name='resnet152', weights_path=os.getenv('FEATU
     if model_name.startswith('resnet'):
         feature_extractor = torch.nn.Sequential(*list(model.children())[:-1])
     elif model_name.startswith('vgg'):
+        # feature_extractor = torch.nn.Sequential(*list(model.children())[:-1])
         model.classifier = model.classifier[:-1]
         feature_extractor = model
 
@@ -362,15 +363,20 @@ class VQAClassifier(nn.Module):
         intermediate_dim : int, 
         feature_extractor,
         tokenizer : AutoTokenizer, 
-        question_encoder : AutoModel
+        question_encoder : AutoModel,
+        device='cpu'
     ):
         
         super(VQAClassifier, self).__init__()
+        
+        question_encoder.to(device)
+        feature_extractor.to(device)
             
         self.feature_extractor = feature_extractor 
         self.question_encoder = question_encoder
         self.tokenizer = tokenizer
         self.vocabulary_size = vocabulary_size
+        self.device = device
             
         self.multimodal_fusion = nn.Sequential(
             nn.Linear(multimodal_fusion_dim, intermediate_dim),
@@ -379,7 +385,7 @@ class VQAClassifier(nn.Module):
         )
             
         self.classifier = nn.Sequential(
-            nn.Linear(768, self.vocabulary_size),
+            nn.Linear(intermediate_dim, vocabulary_size),
         )
 
     def forward(self, question, preprocessed_image): 
@@ -392,9 +398,9 @@ class VQAClassifier(nn.Module):
                         max_length=max_length, 
                         truncation=True)
 
-        input_ids = inputs['input_ids']
-        token_type_ids = inputs['token_type_ids']
-        attention_mask = inputs['attention_mask']
+        input_ids = inputs['input_ids'].to(self.device)
+        token_type_ids = inputs['token_type_ids'].to(self.device)
+        attention_mask = inputs['attention_mask'].to(self.device)
 
         question_encoding = self.question_encoder(input_ids, attention_mask = attention_mask, token_type_ids = token_type_ids).last_hidden_state
         
@@ -402,17 +408,15 @@ class VQAClassifier(nn.Module):
         
         image_feature = self.feature_extractor(preprocessed_image).squeeze()
         
-        fused_output = torch.cat([image_feature, question_encoding])
+        concat_output = torch.cat([image_feature, question_encoding], dim=1)
         
-        logits = self.classifier(fused_output)
+        multimodal_fusion = self.multimodal_fusion(concat_output)
         
-        return {
-            'logits' : logits
-        }
+        logits = self.classifier(multimodal_fusion)
         
-def get_vqa_classifier(language_model=os.getenv('LANGUAGE_MODEL'), feature_extractor_name=None, vocabulary_size=0):
-    class_names = feature_extractor_class_names()
+        return logits
     
+def get_vqa_classifier(weights_path: str, language_model=os.getenv('LANGUAGE_MODEL'), feature_extractor_name=None, vocabulary_size=0, device='cpu'):
     multimodal_fusion_dim = 0
     
     intermediate_dim = int(os.getenv('CLASSIFIER_INTERMEDIATE_DIM'))
@@ -424,7 +428,7 @@ def get_vqa_classifier(language_model=os.getenv('LANGUAGE_MODEL'), feature_extra
     
     tokenizer = get_tokenizer(language_model)
     question_encoder = get_language_model(language_model)
-    feature_extractor = get_feature_extractor_model(model_name=feature_extractor_name, num_classes=len(class_names), freeze='0')
+    feature_extractor = init_feature_extractor(model_name=feature_extractor_name, weights_path=weights_path, device=device) 
     
     classifier = VQAClassifier(
         vocabulary_size=vocabulary_size,
@@ -432,7 +436,8 @@ def get_vqa_classifier(language_model=os.getenv('LANGUAGE_MODEL'), feature_extra
         intermediate_dim=intermediate_dim,
         feature_extractor=feature_extractor,
         tokenizer=tokenizer,
-        question_encoder=question_encoder
+        question_encoder=question_encoder,
+        device=device
     )
     
     return classifier
@@ -559,7 +564,7 @@ def classifier_train(
 
         optimizer.step() 
         
-        acc = multiclass_accuracy(output, label) 
+        acc = multiclass_accuracy(output, target) 
         train_acc += acc.item()
         train_loss += loss.item()
 
@@ -575,24 +580,34 @@ def classifier_train(
 Classifier validation step
 '''
 
-def classifier_val(model, val_dataset, criterion, optimizer, class_names, device, scheduler, scheduler_name):
+def classifier_val(
+    model : VQAClassifier, 
+    val_dataset : KvasirVQA, 
+    criterion : torch.nn, 
+    optimizer : torch.optim, 
+    answer_encoder : LabelEncoder, 
+    device : str, 
+    scheduler : torch.optim.lr_scheduler, 
+    scheduler_name : str
+    ):
     # Evaluate the model on the validation set
     model.eval()
     val_loss = 0.0
     val_acc = 0.0
         
     with torch.no_grad():
-        for i, (img, label, _, _) in enumerate(val_dataset):
-            img = img.unsqueeze(0).to(device)[0]
-            label = (torch.tensor((label2id_list(label, class_names)))).to(device)
+        for i, (img, question, answer) in enumerate(val_dataset):
+
+            img = img.to(device)
+            target = (torch.tensor(answer_encoder.transform(answer))).to(device)
 
             optimizer.zero_grad()
 
-            output = model(img)
+            output = model(question, img)
 
-            loss = criterion(output, label)
+            loss = criterion(output, target)
             
-            acc = multiclass_accuracy(output, label)
+            acc = multiclass_accuracy(output, target)
             val_acc += acc.item()
             val_loss += loss.item()
 

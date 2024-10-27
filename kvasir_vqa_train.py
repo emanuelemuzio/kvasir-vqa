@@ -58,6 +58,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     feature_extractor_run_path = f"{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{args.feature_extractor}/run.json"
+    feature_extractor_weights_path = f"{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{args.feature_extractor}/model.pt"
     
     feature_extractor_name = get_run_info(run_path=feature_extractor_run_path)['model'] 
     
@@ -66,8 +67,6 @@ if __name__ == '__main__':
     turnoff = int(args.turnoff)
 
     logging.info('Recovering classifier model...')
-
-    model = get_vqa_classifier(feature_extractor_name=feature_extractor_name)
 
     df = pd.read_csv(os.getenv('KVASIR_VQA_CSV'))  
     
@@ -105,6 +104,8 @@ if __name__ == '__main__':
     answers = list(set(df['answer']))
     
     answer_encoder = LabelEncoder().fit(answers)
+    
+    model = get_vqa_classifier(feature_extractor_name=feature_extractor_name, device=device, weights_path=feature_extractor_weights_path, vocabulary_size=len(answers))
 
     if device == 'cuda':
         torch.compile(model, 'max-autotune')
