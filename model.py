@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from torchvision import models
 from datetime import datetime
 import logging
+import gc
 from sklearn.preprocessing import LabelEncoder
 import os
 import torch.nn as nn
@@ -292,8 +293,6 @@ def init_feature_extractor(model_name='resnet152', weights_path=os.getenv('FEATU
         model.classifier = model.classifier[:-1]
         feature_extractor = model
 
-    feature_extractor.to(device)
-
     return feature_extractor
 
 '''
@@ -361,23 +360,10 @@ class VQAClassifier(nn.Module):
         vocabulary_size : int,
         multimodal_fusion_dim : int,
         intermediate_dim : int, 
-        feature_extractor,
-        tokenizer : AutoTokenizer, 
-        question_encoder : AutoModel,
-        device='cpu'
     ):
         
         super(VQAClassifier, self).__init__()
         
-        question_encoder.to(device)
-        feature_extractor.to(device)
-            
-        self.feature_extractor = feature_extractor 
-        self.question_encoder = question_encoder
-        self.tokenizer = tokenizer
-        self.vocabulary_size = vocabulary_size
-        self.device = device
-            
         self.multimodal_fusion = nn.Sequential(
             nn.Linear(multimodal_fusion_dim, intermediate_dim),
             nn.ReLU(),
@@ -388,27 +374,27 @@ class VQAClassifier(nn.Module):
             nn.Linear(intermediate_dim, vocabulary_size),
         )
 
-    def forward(self, question, preprocessed_image): 
+    def forward(self, concat_output): 
 
-        max_length = int(os.getenv('MAX_QUESTION_LENGTH'))
-        inputs = self.tokenizer(question, 
-                        add_special_tokens=True, 
-                        return_tensors='pt', 
-                        padding='max_length', 
-                        max_length=max_length, 
-                        truncation=True)
+        # max_length = int(os.getenv('MAX_QUESTION_LENGTH'))
+        # inputs = self.tokenizer(question, 
+        #                 add_special_tokens=True, 
+        #                 return_tensors='pt', 
+        #                 padding='max_length', 
+        #                 max_length=max_length, 
+        #                 truncation=True)
 
-        input_ids = inputs['input_ids'].to(self.device)
-        token_type_ids = inputs['token_type_ids'].to(self.device)
-        attention_mask = inputs['attention_mask'].to(self.device)
+        # input_ids = inputs['input_ids'].to(self.device)
+        # token_type_ids = inputs['token_type_ids'].to(self.device)
+        # attention_mask = inputs['attention_mask'].to(self.device)
 
-        question_encoding = self.question_encoder(input_ids, attention_mask = attention_mask, token_type_ids = token_type_ids).last_hidden_state
+        # question_encoding = self.question_encoder(input_ids, attention_mask = attention_mask, token_type_ids = token_type_ids).last_hidden_state
         
-        question_encoding = question_encoding[:,0,:].squeeze()
+        # question_encoding = question_encoding[:,0,:].squeeze()
         
-        image_feature = self.feature_extractor(preprocessed_image).squeeze()
+        # image_feature = self.feature_extractor(preprocessed_image).squeeze()
         
-        concat_output = torch.cat([image_feature, question_encoding], dim=1)
+        # concat_output = torch.cat([image_feature, question_encoding], dim=1)
         
         multimodal_fusion = self.multimodal_fusion(concat_output)
         
@@ -416,7 +402,7 @@ class VQAClassifier(nn.Module):
         
         return logits
     
-def get_vqa_classifier(weights_path: str, language_model=os.getenv('LANGUAGE_MODEL'), feature_extractor_name=None, vocabulary_size=0, device='cpu'):
+def get_vqa_classifier(feature_extractor_name=None, vocabulary_size=0):
     multimodal_fusion_dim = 0
     
     intermediate_dim = int(os.getenv('CLASSIFIER_INTERMEDIATE_DIM'))
@@ -426,18 +412,10 @@ def get_vqa_classifier(weights_path: str, language_model=os.getenv('LANGUAGE_MOD
     elif feature_extractor_name.startswith('vgg'):
         multimodal_fusion_dim = int(os.getenv('EMBEDDING_SIZE')) + int(os.getenv('VGG_FEATURE_SIZE'))
     
-    tokenizer = get_tokenizer(language_model)
-    question_encoder = get_language_model(language_model)
-    feature_extractor = init_feature_extractor(model_name=feature_extractor_name, weights_path=weights_path, device=device) 
-    
     classifier = VQAClassifier(
         vocabulary_size=vocabulary_size,
         multimodal_fusion_dim=multimodal_fusion_dim,
-        intermediate_dim=intermediate_dim,
-        feature_extractor=feature_extractor,
-        tokenizer=tokenizer,
-        question_encoder=question_encoder,
-        device=device
+        intermediate_dim=intermediate_dim 
     )
     
     return classifier
@@ -447,7 +425,8 @@ Evaluation function for the feature extractor, which includes both the train ste
 step for each epoch.
 '''
 
-def classifier_evaluate(model : VQAClassifier, 
+def classifier_evaluate(
+            model : VQAClassifier, 
             num_epochs : int, 
             batch_size : int, 
             optimizer : torch.optim, 
@@ -459,6 +438,10 @@ def classifier_evaluate(model : VQAClassifier,
             criterion : torch.nn, 
             early_stopper : EarlyStopper, 
             answer_encoder : LabelEncoder,
+            max_length : int, 
+            tokenizer : AutoTokenizer,
+            feature_extractor,
+            question_encoder : AutoModel,
             train_loss_ckp = [],
             train_acc_ckp = [],
             val_loss_ckp = [],
@@ -494,11 +477,40 @@ def classifier_evaluate(model : VQAClassifier,
 
     for epoch in tqdm(range(start_epoch, num_epochs + 1)):
         torch.cuda.empty_cache()
-        epoch_train_loss, epoch_train_acc = classifier_train(model, train_dataloader, criterion, optimizer, answer_encoder, device, scheduler, scheduler_name)
+
+        epoch_train_loss, epoch_train_acc = classifier_train(
+            model,
+            train_dataloader, 
+            criterion, 
+            optimizer, 
+            answer_encoder, 
+            max_length, 
+            tokenizer,
+            question_encoder,
+            feature_extractor,
+            device, 
+            scheduler, 
+            scheduler_name
+        )
+        
         train_loss.append(epoch_train_loss)
         train_acc.append(epoch_train_acc)
         
-        epoch_val_loss, epoch_val_acc = classifier_val(model, val_dataloader, criterion, optimizer, answer_encoder, device, scheduler, scheduler_name)
+        epoch_val_loss, epoch_val_acc = classifier_val(
+            model, 
+            val_dataloader, 
+            criterion, 
+            optimizer, 
+            answer_encoder, 
+            max_length, 
+            question_encoder,
+            tokenizer,
+            feature_extractor, 
+            device, 
+            scheduler, 
+            scheduler_name
+        )
+        
         val_loss.append(epoch_val_loss)
         val_acc.append(epoch_val_acc)
         
@@ -539,10 +551,13 @@ def classifier_train(
     criterion : torch.nn, 
     optimizer : torch.optim, 
     answer_encoder : LabelEncoder, 
+    max_length : int,
+    tokenizer : AutoTokenizer,
+    question_encoder : AutoModel,
+    feature_extractor,
     device : str, 
     scheduler : torch.optim.lr_scheduler, 
-    scheduler_name : str
-    ):
+    scheduler_name : str):
     
     model.train()
 
@@ -550,13 +565,36 @@ def classifier_train(
     train_acc = 0.0
 
     for i, (img, question, answer) in enumerate(train_dataset):
+        
+        inputs = tokenizer(
+                        question, 
+                        add_special_tokens=True, 
+                        return_tensors='pt', 
+                        padding='max_length', 
+                        max_length=max_length, 
+                        truncation=True)
+        
+        inputs = inputs.to(device)
 
+        input_ids = inputs['input_ids']
+        token_type_ids = inputs['token_type_ids']
+        attention_mask = inputs['attention_mask']
+
+        question_encoding = question_encoder(input_ids, attention_mask = attention_mask, token_type_ids = token_type_ids).last_hidden_state
+        
+        question_encoding = question_encoding[:,0,:].squeeze()
+        
         img = img.to(device)
+        
+        image_feature = feature_extractor(img).squeeze()
+        
+        concat_output = torch.cat([image_feature, question_encoding], dim=1)
+        
+        output = model(concat_output)
+        
         target = (torch.tensor(answer_encoder.transform(answer))).to(device)
-
+        
         optimizer.zero_grad()
-
-        output = model(question, img)
 
         loss = criterion(output, target)
 
@@ -567,6 +605,11 @@ def classifier_train(
         acc = multiclass_accuracy(output, target) 
         train_acc += acc.item()
         train_loss += loss.item()
+        
+        gc.collect()
+        
+        if device == 'cuda':
+            torch.cuda.empty_cache()
 
     if scheduler_name == 'cosine':
         scheduler.step()
@@ -586,6 +629,10 @@ def classifier_val(
     criterion : torch.nn, 
     optimizer : torch.optim, 
     answer_encoder : LabelEncoder, 
+    max_length : int,
+    question_encoder : AutoModel,
+    tokenizer : AutoTokenizer,
+    feature_extractor,
     device : str, 
     scheduler : torch.optim.lr_scheduler, 
     scheduler_name : str
@@ -597,19 +644,47 @@ def classifier_val(
         
     with torch.no_grad():
         for i, (img, question, answer) in enumerate(val_dataset):
+            
+            inputs = tokenizer(
+                        question, 
+                        add_special_tokens=True, 
+                        return_tensors='pt', 
+                        padding='max_length', 
+                        max_length=max_length, 
+                        truncation=True)
+        
+            inputs = inputs.to(device)
+        
+            input_ids = inputs['input_ids']
+            token_type_ids = inputs['token_type_ids']
+            attention_mask = inputs['attention_mask']
 
+            question_encoding = question_encoder(input_ids, attention_mask = attention_mask, token_type_ids = token_type_ids).last_hidden_state
+            
+            question_encoding = question_encoding[:,0,:].squeeze()
+            
             img = img.to(device)
+            
+            image_feature = feature_extractor(img).squeeze()
+            
+            concat_output = torch.cat([image_feature, question_encoding], dim=1)
+            
+            output = model(concat_output)
+            
             target = (torch.tensor(answer_encoder.transform(answer))).to(device)
 
             optimizer.zero_grad()
-
-            output = model(question, img)
 
             loss = criterion(output, target)
             
             acc = multiclass_accuracy(output, target)
             val_acc += acc.item()
             val_loss += loss.item()
+            
+            gc.collect()
+        
+            if device == 'cuda':
+                torch.cuda.empty_cache()
 
         # Calculate validation loss
         val_loss /= len(val_dataset)

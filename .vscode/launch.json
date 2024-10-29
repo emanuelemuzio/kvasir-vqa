@@ -34,18 +34,18 @@
             "args": [
                 "--turnoff=-1",
                 "--num_epochs=100",
-                "--batch_size=128",
-                "--lr=0.0001",
+                "--batch_size=64",
+                "--lr=0.001",
                 "--momentum=0.9",
                 "--T_max=100",
                 "--eta_min=0.001",
                 "--patience=10",
                 "--min_delta=0.0025",
-                "--scheduler=cosine",
-                "--optimizer=sgd",
+                "--scheduler=plateau",
+                "--optimizer=adam",
                 "--mode=min",
                 "--weight_decay=0.01",
-                "--feature_extractor=26102024235227"
+                "--feature_extractor=28102024003804"
             ]
         },
         {

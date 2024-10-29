@@ -12,7 +12,7 @@ import logging
 from callback import EarlyStopper
 from util import get_run_info, generate_run_id
 from dataset import KvasirVQA, df_train_test_split
-from model import get_vqa_classifier, classifier_evaluate
+from model import get_vqa_classifier, classifier_evaluate, get_tokenizer, get_language_model, init_feature_extractor
 from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR
 import argparse
 from plot_generator import plot_run
@@ -53,7 +53,6 @@ if __name__ == '__main__':
     parser.add_argument('--optimizer', help="'sgd', 'adam' or 'adamw")
     parser.add_argument('--weight_decay', help="1e-2 or 1e-3")
     parser.add_argument('--feature_extractor', help="use the run id in order to retrieve automatically the backbone used for the feature extraction")
-    # parser.add_argument('--freeze', help="'0' for inference, '1' for training only the top layer or '2' for training the entire model")
 
     args = parser.parse_args()
     
@@ -105,7 +104,13 @@ if __name__ == '__main__':
     
     answer_encoder = LabelEncoder().fit(answers)
     
-    model = get_vqa_classifier(feature_extractor_name=feature_extractor_name, device=device, weights_path=feature_extractor_weights_path, vocabulary_size=len(answers))
+    model = get_vqa_classifier(feature_extractor_name=feature_extractor_name, vocabulary_size=len(answers))
+    
+    model = model.to(device)
+    
+    tokenizer = get_tokenizer()
+    question_encoder = get_language_model().to(device)
+    feature_extractor = init_feature_extractor(model_name=feature_extractor_name, weights_path=feature_extractor_weights_path).to(device)
 
     if device == 'cuda':
         torch.compile(model, 'max-autotune')
@@ -157,8 +162,8 @@ if __name__ == '__main__':
         scheduler = CosineAnnealingLR(optimizer=optimizer, T_max=T_max, eta_min=eta_min)
     elif args.scheduler == 'linear':
         scheduler = LinearLR(optimizer=optimizer)
-
-    model.to(device)
+        
+    max_length = int(os.getenv('MAX_QUESTION_LENGTH'))
 
     train_loss_ckp = None
     train_acc_ckp = None
@@ -201,6 +206,10 @@ if __name__ == '__main__':
         criterion=criterion, 
         early_stopper=early_stopper, 
         answer_encoder=answer_encoder,
+        max_length=max_length,
+        tokenizer=tokenizer,
+        feature_extractor=feature_extractor,
+        question_encoder=question_encoder,
         train_loss_ckp = train_loss_ckp,
         train_acc_ckp = train_acc_ckp,
         val_loss_ckp = val_loss_ckp,
