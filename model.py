@@ -21,6 +21,7 @@ from callback import EarlyStopper
 
 now = datetime.now()
 now = now.strftime("%Y-%m-%d")
+feature_extractor_min_epochs = int(os.getenv('FEATURE_EXTRACTOR_MIN_EPOCHS'))
 
 logging.basicConfig(
     filename=f"logs/{now}.log",
@@ -189,9 +190,10 @@ def feature_extractor_evaluate(model,
 
             logging.info('Checkpoint reached')
             
-        if early_stopper.early_stop(epoch_val_loss):
-            logging.info('Early stop activating')
-            break
+        if epoch > feature_extractor_min_epochs:
+            if early_stopper.early_stop(epoch_val_loss):
+                logging.info('Early stop activating')
+                break
             
     return train_loss, train_acc, val_loss, val_acc, best_acc, best_weights
 

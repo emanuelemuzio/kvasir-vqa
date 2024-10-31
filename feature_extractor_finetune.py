@@ -52,6 +52,7 @@ if __name__ == '__main__':
     parser.add_argument('--weight_decay', help="1e-2 or 1e-3")
     parser.add_argument('--model', help="'resnet50', 'resnet101', 'resnet152' or 'vgg16'")
     parser.add_argument('--freeze', help="'0' for inference, '1' for training only the top layer or '2' for training the entire model")
+    parser.add_argument('--aug', help="'1' for augmented dataset")
 
     args = parser.parse_args()
 
@@ -62,8 +63,12 @@ if __name__ == '__main__':
     model = args.model or 'resnet152'
 
     run_id = generate_run_id()
+    
+    use_aug = args.aug == '1'
+    
+    csv_path = 'FEATURE_EXTRACTOR_CSV_AUG' if use_aug else 'FEATURE_EXTRACTOR_CSV'
 
-    dataset = prepare_feature_extractor_data(os.getenv('FEATURE_EXTRACTOR_CSV_AUG'), aug=True)    
+    dataset = prepare_feature_extractor_data(csv_path, aug=use_aug)    
 
     class_names = feature_extractor_class_names()
     
