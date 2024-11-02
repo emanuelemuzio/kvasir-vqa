@@ -11,14 +11,11 @@ import random
 from dotenv import load_dotenv
 from sklearn.utils import shuffle
 import logging
-from datetime import datetime
 from math import ceil
 from random import randint as rand
 from PIL import Image
 import torch
-
-now = datetime.now()
-now = now.strftime("%Y-%m-%d")
+from util import init_logger, ROOT
 
 random_seed = 42
 
@@ -26,17 +23,7 @@ np.random.seed(random_seed)
 random.seed(random_seed)
 torch.manual_seed(random_seed)
 
-logging.basicConfig(
-    filename=f"logs/{now}.log",
-    encoding="utf-8",
-    filemode="a",
-    format="{asctime} - {levelname} - {message}",
-    style="{",
-    datefmt="%Y-%m-%d %H:%M",
-    force=True,
-    level=logging.INFO
-)
-
+init_logger()
 load_dotenv()
 
 '''
@@ -129,7 +116,7 @@ class FeatureExtractor(Dataset):
         path = self.path[idx]
         code = self.code[idx] 
         bbox = self.bbox[idx] 
-        full_path = f"{path}/{code}.jpg"
+        full_path = f"{ROOT}/{path}/{code}.jpg"
         img = read_image(full_path)        
 
         if len(bbox) > 0:
@@ -170,7 +157,7 @@ def generate_feature_extractor_classes_json(df : pd.DataFrame):
     for i in range(len(class_names)):
         classes[class_names[i]] = i
 
-    with open(os.getenv('FEATURE_EXTRACTOR_CLASSES'), 'w') as f:
+    with open(f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_CLASSES')}", 'w') as f:
         json.dump(classes, f)
 
 '''
@@ -197,14 +184,14 @@ def prepare_feature_extractor_data(data_path, aug=False):
 
         logging.info('Loading kvasir instruments')
         
-        with open(os.getenv('KVASIR_INST_BBOX'),'r') as file:
+        with open(f"{ROOT}/{os.getenv('KVASIR_INST_BBOX')}",'r') as file:
             kvasir_inst_json_data = json.load(file)
             
         kvasir_inst_img_codes = kvasir_inst_json_data.keys()
         
         for code in kvasir_inst_img_codes:
             for bbox in kvasir_inst_json_data[code]['bbox']:
-                path = os.getenv('KVASIR_INST_IMG')
+                path = f"{ROOT}/{os.getenv('KVASIR_INST_IMG')}"
                 kvasir_inst_data.append(
                     [
                         path,
@@ -224,14 +211,14 @@ def prepare_feature_extractor_data(data_path, aug=False):
         hyper_kvasir_segmented_json_data = None
         hyper_kvasir_data = []
         
-        with open(os.getenv('HYPER_KVASIR_SEGMENTED_BBOX'),'r') as file:
+        with open(f"{ROOT}/{os.getenv('HYPER_KVASIR_SEGMENTED_BBOX')}",'r') as file:
             hyper_kvasir_segmented_json_data = json.load(file)
             
         hyper_kvasir_segmented_img_codes = hyper_kvasir_segmented_json_data.keys()
         
         for code in hyper_kvasir_segmented_img_codes:
             for bbox in hyper_kvasir_segmented_json_data[code]['bbox']:
-                path = os.getenv('HYPER_KVASIR_SEGMENTED_IMG')
+                path = f"{ROOT}/{os.getenv('HYPER_KVASIR_SEGMENTED_IMG')}"
                 hyper_kvasir_data.append(
                     [
                         path,
@@ -245,16 +232,16 @@ def prepare_feature_extractor_data(data_path, aug=False):
 
         hyper_kvasir_labeled_img_paths = []
         
-        with open(os.getenv('HYPER_KVASIR_LABELED_IMG_PATHS'),'r') as file:
+        with open(f"{ROOT}/{os.getenv('HYPER_KVASIR_LABELED_IMG_PATHS')}",'r') as file:
             hyper_kvasir_labeled_img_paths = json.load(file)
 
         for path in hyper_kvasir_labeled_img_paths:
             label = path.split("/")
             label = label[-1]
-            for code in os.listdir(f"{os.getenv('HYPER_KVASIR')}/{path}"):
+            for code in os.listdir(f"{ROOT}/{os.getenv('HYPER_KVASIR')}/{path}"):
                 hyper_kvasir_data.append(
                     [
-                        f"{os.getenv('HYPER_KVASIR')}/{path}",
+                        f"{ROOT}/{os.getenv('HYPER_KVASIR')}/{path}",
                         label,
                         code[:-4],
                         "[]"
@@ -298,7 +285,7 @@ def prepare_feature_extractor_data(data_path, aug=False):
                         new_paths = augment_image(src, code, n_augs)
 
                         for p in new_paths:
-                            augmented_images.append([os.getenv('AUGMENTED_DATA'), l, p, bbox])
+                            augmented_images.append([f"{ROOT}/{os.getenv('AUGMENTED_DATA')}", l, p, bbox])
 
             df_aug = pd.DataFrame(augmented_images, columns=rows)
 
@@ -314,10 +301,10 @@ def prepare_feature_extractor_data(data_path, aug=False):
 
         df['bbox'] = df['bbox'].apply(format_bbox)
 
-        if not os.path.exists(os.getenv('FEATURE_EXTRACTOR_CLASSES')):
+        if not os.path.exists(f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_CLASSES')}"):
             generate_feature_extractor_classes_json(df)
     
-    if not os.path.exists(os.getenv('FEATURE_EXTRACTOR_CLASSES')):
+    if not os.path.exists(f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_CLASSES')}"):
         generate_feature_extractor_classes_json(df)
 
     return df
@@ -330,7 +317,7 @@ Utility function for loading the JSON file containing the mapping for the classe
 '''
 
 def feature_extractor_classes():
-    f = open(os.getenv('FEATURE_EXTRACTOR_CLASSES'))
+    f = open(f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_CLASSES')}")
     data = json.load(f)
 
     return data
@@ -377,7 +364,7 @@ def augment_image(src : str, code : str, num : int) -> list:
 
         new_code = f"{code}-aug-{i + 1}"
 
-        new = f"{os.getenv('AUGMENTED_DATA')}/{new_code}.jpg"
+        new = f"{ROOT}/{os.getenv('AUGMENTED_DATA')}/{new_code}.jpg"
 
         aug.save(new)
         data.append(new_code)
@@ -409,7 +396,7 @@ Download the KVASIR-VQA dataset, splitted in the metadata.csv file and the imgs
 '''
 
 def load_kvasir_vqa() -> any:
-    return load_dataset(os.getenv('KVASIR_VQA_DATASET'))
+    return load_dataset(f"{ROOT}/{os.getenv('KVASIR_VQA_DATASET')}")
 
 '''
 Utility function for retrieving the original Kvasir VQA dataset using the HuggingFace Loader.
@@ -420,15 +407,15 @@ def retrieve_kvasir_vqa_dataset() -> None:
     dataset = load_kvasir_vqa()
     dataframe = dataset['raw'].select_columns(['source', 'question', 'answer', 'img_id']).to_pandas()
     
-    if not os.path.exists(f"{os.getenv('KVASIR_VQA_METADATA')}/metadata.csv"):
+    if not os.path.exists(f"{ROOT}/{os.getenv('KVASIR_VQA_METADATA')}/metadata.csv"):
         print('[LOG] Retrieving metadata.csv for Kvasir VQA')
-        dataframe.to_csv(f"{os.getenv('KVASIR_VQA_METADATA')}/metadata.csv", index=False)
+        dataframe.to_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_METADATA')}/metadata.csv", index=False)
         
-    if not os.path.exists(f"{os.getenv('KVASIR_VQA_DATA')}"):
+    if not os.path.exists(f"{ROOT}/{os.getenv('KVASIR_VQA_DATA')}"):
         print('[LOG] Retrieving Kvasir VQA data')
-        os.makedirs(f"{os.getenv('KVASIR_VQA_DATA')}", exist_ok=True)
+        os.makedirs(f"{ROOT}/{os.getenv('KVASIR_VQA_DATA')}", exist_ok=True)
         for i, row in dataframe.groupby('img_id').nth(0).iterrows(): # for images
-            dataset['raw'][i]['image'].save(f"{os.getenv('KVASIR_VQA_DATA')}/{row['img_id']}.jpg")
+            dataset['raw'][i]['image'].save(f"{ROOT}/{os.getenv('KVASIR_VQA_DATA')}/{row['img_id']}.jpg")
 
 class KvasirVQA(Dataset):
     def __init__(self, source, question, answer, img_id, base_path):  
@@ -460,10 +447,4 @@ class KvasirVQA(Dataset):
 
         transformed_image = self.transform(img.float())
 
-        return transformed_image, question, answer
-
-def main():
-    retrieve_kvasir_vqa_dataset()
-    
-if __name__ == '__main__':
-    main()
+        return transformed_image, question, answer 

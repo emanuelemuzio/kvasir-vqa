@@ -2,22 +2,32 @@ from datetime import datetime
 import logging
 import json
 import os
-
-now = datetime.now()
-now = now.strftime("%Y-%m-%d")
+import matplotlib.pyplot as plt
 
 ROOT = os.getcwd()
 
-logging.basicConfig(
-    filename=f"{ROOT}/logs/{now}.log",
-    encoding="utf-8",
-    filemode="a",
-    format="{asctime} - {levelname} - {message}",
-    style="{",
-    datefmt="%Y-%m-%d %H:%M",
-    force=True,
-    level=logging.INFO
-)
+'''
+Utility function for logger initialization
+'''
+
+def init_logger():
+    now = datetime.now()
+    now = now.strftime("%Y-%m-%d")
+    
+    logging.basicConfig(
+        filename=f"{ROOT}/logs/{now}.log",
+        encoding="utf-8",
+        filemode="a",
+        format="{asctime} - {levelname} - {message}",
+        style="{",
+        datefmt="%Y-%m-%d %H:%M",
+        force=True,
+        level=logging.INFO
+    )
+    
+'''
+Generate run ID from timestamp
+'''
 
 def generate_run_id():
 
@@ -73,8 +83,33 @@ def get_common_subsequences(strings : list) -> list:
         
     return sorted_subsequences 
 
+'''
+Retrieve training run info
+'''
+
 def get_run_info(run_path : str):
     f = open(run_path)
     data = json.load(f)
 
     return data
+
+'''
+Plot run info from a model training session using matplotlib functions
+'''
+
+def plot_run(base_path, run_id):
+    run_path = f"{ROOT}/{base_path}/{run_id}/run.json"
+    if os.path.exists(run_path):
+        with open(run_path, 'r') as file:
+            data = json.load(file)
+
+            actual_epochs = list(range(1, len(data['train_loss']) + 1))
+
+            plt.plot(actual_epochs, data['train_loss'], 'r', label="Train loss")
+            plt.plot(actual_epochs, data['val_loss'], 'g', label="Val loss")
+            plt.plot(actual_epochs, data['val_acc'], 'b', label="Val acc")
+            plt.legend(loc="upper right")
+
+            plt.savefig(f"{base_path}/{run_id}/run.png")
+
+init_logger()

@@ -1,7 +1,6 @@
 from torchvision import models
 from dotenv import load_dotenv
 from torchvision import models
-from datetime import datetime
 import logging
 import gc
 from sklearn.preprocessing import LabelEncoder
@@ -11,29 +10,16 @@ from transformers import AutoTokenizer, AutoModel
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 import torch
-from util import ROOT
+from util import ROOT, init_logger
 import numpy as np
 from dotenv import load_dotenv
 from torcheval.metrics.functional import multiclass_accuracy
-from datetime import datetime
 import logging
 from dataset import label2id_list, feature_extractor_class_names, KvasirVQA
 
-now = datetime.now()
-now = now.strftime("%Y-%m-%d")
 feature_extractor_min_epochs = int(os.getenv('FEATURE_EXTRACTOR_MIN_EPOCHS'))
 
-logging.basicConfig(
-    filename=f"{ROOT}/logs/{now}.log",
-    encoding="utf-8",
-    filemode="a",
-    format="{asctime} - {levelname} - {message}",
-    style="{",
-    datefmt="%Y-%m-%d %H:%M",
-    force=True,
-    level=logging.INFO
-)
-
+init_logger()
 load_dotenv()
 
 '''
