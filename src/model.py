@@ -11,20 +11,20 @@ from transformers import AutoTokenizer, AutoModel
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 import torch
+from util import ROOT
 import numpy as np
 from dotenv import load_dotenv
 from torcheval.metrics.functional import multiclass_accuracy
 from datetime import datetime
 import logging
 from dataset import label2id_list, feature_extractor_class_names, KvasirVQA
-from callback import EarlyStopper
 
 now = datetime.now()
 now = now.strftime("%Y-%m-%d")
 feature_extractor_min_epochs = int(os.getenv('FEATURE_EXTRACTOR_MIN_EPOCHS'))
 
 logging.basicConfig(
-    filename=f"logs/{now}.log",
+    filename=f"{ROOT}/logs/{now}.log",
     encoding="utf-8",
     filemode="a",
     format="{asctime} - {levelname} - {message}",
@@ -35,6 +35,32 @@ logging.basicConfig(
 )
 
 load_dotenv()
+
+'''
+|----------------------------|
+|EARLY STOPPER IMPLEMENTATION|
+|----------------------------|
+'''
+
+class EarlyStopper:
+    def __init__(self, patience=1, min_delta=0):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.counter = 0
+        self.min_validation_loss = float('inf')
+
+    def early_stop(self, validation_loss):
+        if validation_loss < self.min_validation_loss:
+            logging.info('Patience counter reset')
+            self.min_validation_loss = validation_loss
+            self.counter = 0
+        elif validation_loss > (self.min_validation_loss + self.min_delta):
+            logging.info('Patience counter increased')
+            self.counter += 1
+            if self.counter >= self.patience:
+                logging.info('Patience counter exceeded')
+                return True
+        return False
 
 '''
 |----------------------|
@@ -119,7 +145,6 @@ def feature_extractor_evaluate(model,
             batch_size, 
             optimizer, 
             scheduler,
-            scheduler_name,
             device, 
             train_dataset, 
             val_dataset, 
@@ -161,11 +186,11 @@ def feature_extractor_evaluate(model,
 
     for epoch in tqdm(range(start_epoch, num_epochs + 1)):
         torch.cuda.empty_cache()
-        epoch_train_loss, epoch_train_acc = feature_extractor_train(model, train_dataloader, criterion, optimizer, class_names, device, scheduler, scheduler_name)
+        epoch_train_loss, epoch_train_acc = feature_extractor_train(model, train_dataloader, criterion, optimizer, class_names, device, scheduler)
         train_loss.append(epoch_train_loss)
         train_acc.append(epoch_train_acc)
         
-        epoch_val_loss, epoch_val_acc = feature_extractor_val(model, val_dataloader, criterion, optimizer, class_names, device, scheduler, scheduler_name)
+        epoch_val_loss, epoch_val_acc = feature_extractor_val(model, val_dataloader, criterion, optimizer, class_names, device)
         val_loss.append(epoch_val_loss)
         val_acc.append(epoch_val_acc)
         
@@ -186,7 +211,7 @@ def feature_extractor_evaluate(model,
                 'val_acc' : val_acc,
                 'best_acc' : best_acc,
                 'run_id' : run_id
-            }, os.getenv('FEATURE_EXTRACTOR_CHECKPOINT')) 
+            }, f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_CHECKPOINT')}") 
 
             logging.info('Checkpoint reached')
             
@@ -201,7 +226,7 @@ def feature_extractor_evaluate(model,
 Feature extractor train step function
 '''
 
-def feature_extractor_train(model, train_dataset, criterion, optimizer, class_names, device, scheduler, scheduler_name):
+def feature_extractor_train(model, train_dataset, criterion, optimizer, class_names, device, scheduler):
     model.train()
 
     train_loss = 0.0
@@ -226,8 +251,8 @@ def feature_extractor_train(model, train_dataset, criterion, optimizer, class_na
         train_acc += acc.item()
         train_loss += loss.item()
 
-    if scheduler_name == 'cosine':
-        scheduler.step()
+    for s in scheduler:
+        s.step()
 
     train_loss = train_loss / len(train_dataset)
     train_acc = train_acc / len(train_dataset)
@@ -238,7 +263,7 @@ def feature_extractor_train(model, train_dataset, criterion, optimizer, class_na
 Feature extraction validation step
 '''
 
-def feature_extractor_val(model, val_dataset, criterion, optimizer, class_names, device, scheduler, scheduler_name):
+def feature_extractor_val(model, val_dataset, criterion, optimizer, class_names, device):
     # Evaluate the model on the validation set
     model.eval()
     val_loss = 0.0
@@ -265,9 +290,6 @@ def feature_extractor_val(model, val_dataset, criterion, optimizer, class_names,
         # Calculate validation accuracy
         val_acc = val_acc / len(val_dataset)
         
-        if scheduler_name == 'plateau':
-            scheduler.step(val_loss)
-
         return val_loss, val_acc 
     
 '''
@@ -533,7 +555,7 @@ def classifier_evaluate(
                 'val_acc' : val_acc,
                 'best_acc' : best_acc,
                 'run_id' : run_id
-            }, os.getenv('CLASSIFIER_CHECKPOINT')) 
+            }, f"{ROOT}/{os.getenv('CLASSIFIER_CHECKPOINT')}") 
 
             logging.info('Checkpoint reached')
             

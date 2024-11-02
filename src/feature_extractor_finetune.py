@@ -8,19 +8,19 @@ import torch.optim as optim
 from datetime import datetime
 import shutil
 import logging
-from callback import EarlyStopper
-from util import generate_run_id
+from model import EarlyStopper
+from util import generate_run_id, ROOT
 from dataset import FeatureExtractor, prepare_feature_extractor_data, df_train_test_split, feature_extractor_class_names
 from model import get_feature_extractor_model, feature_extractor_evaluate
 from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR
 import argparse
-from plot_generator import plot_run
+from src.plot_generator import plot_run
 
 now = datetime.now()
 now = now.strftime("%Y-%m-%d")
 
 logging.basicConfig(
-    filename=f"logs/{now}.log",
+    filename=f"{ROOT}/logs/{now}.log",
     encoding="utf-8",
     filemode="a",
     format="{asctime} - {levelname} - {message}",
@@ -66,8 +66,8 @@ if __name__ == '__main__':
     
     use_aug = args.aug == '1'
     
-    csv_path = 'FEATURE_EXTRACTOR_CSV_AUG' if use_aug else 'FEATURE_EXTRACTOR_CSV'
-
+    csv_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_CSV_AUG')}" if use_aug else f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_CSV')}"
+    
     dataset = prepare_feature_extractor_data(csv_path, aug=use_aug)    
 
     class_names = feature_extractor_class_names()
@@ -138,14 +138,17 @@ if __name__ == '__main__':
         
     early_stopper = EarlyStopper(patience=patience, min_delta=min_delta)
 
-    scheduler = None
+    scheduler = []
+    
+    scheduler_names = args.scheduler.split(',')
 
-    if args.scheduler == 'plateau':
-        scheduler = ReduceLROnPlateau(optimizer=optimizer, mode=mode)
-    elif args.scheduler == 'cosine':
-        scheduler = CosineAnnealingLR(optimizer=optimizer, T_max=T_max, eta_min=eta_min)
-    elif args.scheduler == 'linear':
-        scheduler = LinearLR(optimizer=optimizer)
+    for name in scheduler_names:
+        if args.scheduler == 'plateau':
+            scheduler.append(ReduceLROnPlateau(optimizer=optimizer, mode=mode))
+        elif args.scheduler == 'cosine':
+            scheduler.append(CosineAnnealingLR(optimizer=optimizer, T_max=T_max, eta_min=eta_min))
+        elif args.scheduler == 'linear':
+            scheduler.append(LinearLR(optimizer=optimizer))
 
     pretrained_model.to(device)
 
@@ -158,8 +161,8 @@ if __name__ == '__main__':
 
     run_path = None
     
-    if os.path.exists(os.getenv('FEATURE_EXTRACTOR_CHECKPOINT')):
-        checkpoint = torch.load(os.getenv('FEATURE_EXTRACTOR_CHECKPOINT'), weights_only=True)
+    if os.path.exists(f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_CHECKPOINT')}"):
+        checkpoint = torch.load(f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_CHECKPOINT')}", weights_only=True)
         pretrained_model.load_state_dict(checkpoint['model_state_dict'])
         start_epoch = checkpoint['num_epochs']
         train_loss_ckp = checkpoint['train_loss']
@@ -168,11 +171,11 @@ if __name__ == '__main__':
         val_acc_ckp = checkpoint['val_acc']
         best_acc_ckp = checkpoint['best_acc']
         run_id = checkpoint['run_id']
-        run_path = f"{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{run_id}"
+        run_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{run_id}"
         logging.info(f'Loaded run {run_id} checkpoint')
     else:
         logging.info(f'New run: {run_id}')
-        run_path = f"{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{run_id}"
+        run_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{run_id}"
         os.mkdir(run_path)
 
     logging.info('Starting model evaluation')
@@ -183,7 +186,6 @@ if __name__ == '__main__':
         batch_size=batch_size,
         optimizer=optimizer, 
         scheduler=scheduler,
-        scheduler_name=args.scheduler,
         device=device, 
         train_dataset=train_dataset, 
         val_dataset=val_dataset, 
@@ -201,9 +203,9 @@ if __name__ == '__main__':
     
     logging.info(f'Evaluation ended in {len(train_loss)} epochs')
     
-    torch.save(best_weights, f"{run_path}/model.pt")
+    torch.save(best_weights, f"{ROOT}/{run_path}/model.pt")
 
-    with open(f"{run_path}/run.json", "w") as f:
+    with open(f"{ROOT}/{run_path}/run.json", "w") as f:
         config = vars(args)
         config['train_loss'] = train_loss
         config['val_loss'] = val_loss

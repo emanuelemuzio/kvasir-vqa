@@ -1,7 +1,11 @@
-from model import encode_question
+from .util import get_base_path
+
+t = get_base_path()
+
+from src.model import encode_question
 from dotenv import load_dotenv
 import os
-from feature_extractor import get_feature_extractor
+from src.feature_extractor import get_feature_extractor
 import argparse
 import cv2
 import numpy as np
@@ -16,7 +20,8 @@ from pytorch_grad_cam import GuidedBackpropReLUModel
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 from pytorch_grad_cam import GradCAM 
 from pytorch_grad_cam.utils.image import show_cam_on_image
-from dataset import feature_extractor_class_names 
+from src.dataset import feature_extractor_class_names 
+
 
 load_dotenv()
 

@@ -10,20 +10,20 @@
             "args": [
                 "--turnoff=-1",
                 "--num_epochs=300",
-                "--batch_size=16",
+                "--batch_size=24",
                 "--lr=0.002",
                 "--momentum=0.9",
                 "--T_max=10",
                 "--eta_min=0.001",
                 "--patience=10",
-                "--min_delta=0.0025",
-                "--scheduler=cosine",
+                "--min_delta=0.01",
+                "--scheduler=plateau,cosine",
                 "--optimizer=sgd",
                 "--mode=min",
                 "--weight_decay=0.01",
-                "--model=resnet50",
+                "--model=resnet152",
                 "--freeze=1",
-                "--aug=0"
+                "--aug=1"
             ]
         },
         {

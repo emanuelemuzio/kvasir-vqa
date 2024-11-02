@@ -9,7 +9,7 @@ from pytorch_grad_cam.utils.image import (preprocess_image)
 import cv2 as cv
 import argparse
 import json
-from model import init_feature_extractor
+from src.model import init_feature_extractor
  
 load_dotenv()
 

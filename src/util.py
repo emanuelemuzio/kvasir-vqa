@@ -1,13 +1,15 @@
 from datetime import datetime
 import logging
-import os
 import json
+import os
 
 now = datetime.now()
 now = now.strftime("%Y-%m-%d")
 
+ROOT = os.getcwd()
+
 logging.basicConfig(
-    filename=f"logs/{now}.log",
+    filename=f"{ROOT}/logs/{now}.log",
     encoding="utf-8",
     filemode="a",
     format="{asctime} - {levelname} - {message}",

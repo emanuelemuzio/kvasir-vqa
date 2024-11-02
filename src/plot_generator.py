@@ -1,11 +1,12 @@
 import matplotlib.pyplot as plt
 import json, os
 from dotenv import load_dotenv
+from util import ROOT
 
 load_dotenv()
 
 def plot_run(base_path, run_id):
-    run_path = f"{base_path}/{run_id}/run.json"
+    run_path = f"{ROOT}/{base_path}/{run_id}/run.json"
     if os.path.exists(run_path):
         with open(run_path, 'r') as file:
             data = json.load(file)
