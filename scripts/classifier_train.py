@@ -1,3 +1,6 @@
+import sys
+sys.path.append('src')
+
 import os
 import torch
 import pandas as pd
@@ -7,16 +10,16 @@ from torch import optim
 from torch.nn import CrossEntropyLoss
 import torch.optim as optim 
 import shutil
-import logging
-from ..src.model import EarlyStopper
-from ..src.util import get_run_info, generate_run_id, ROOT, init_logger, plot_run
-from ..src.dataset import KvasirVQA, df_train_test_split
-from ..src.model import get_vqa_classifier, classifier_evaluate, get_tokenizer, get_language_model, init_feature_extractor
+from common.earlystop import EarlyStopper
+from common.util import get_run_info, generate_run_id, ROOT, logger, plot_run, df_train_test_split
+from classifier.data import Dataset_
+from classifier.model import evaluate, get_classifier
+from question_encode.model import get_tokenizer, get_language_model 
+from feature_extractor.model import init
 from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR
 import argparse
 from sklearn.preprocessing import LabelEncoder
 
-init_logger()
 load_dotenv()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -50,7 +53,7 @@ if __name__ == '__main__':
 
     turnoff = int(args.turnoff)
 
-    logging.info('Recovering classifier model...')
+    logger.info('Recovering classifier model...')
 
     df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_CSV')}")  
     
@@ -59,50 +62,47 @@ if __name__ == '__main__':
     train_set, val_set = df_train_test_split(df, 0.3) 
     val_set, test_set = df_train_test_split(df, 0.5) 
 
-    logging.info('Building dataloaders...')
+    logger.info('Building dataloaders...')
     
     kvasir_vqa_datapath = f"{ROOT}/{os.getenv('KVASIR_VQA_DATA')}"
     
-    train_dataset = KvasirVQA(
+    train_dataset = Dataset_(
         train_set['source'].to_numpy(), 
         train_set['question'].to_numpy(), 
         train_set['answer'].to_numpy(), 
         train_set['img_id'].to_numpy(),
-        
-        )
+        kvasir_vqa_datapath)
     
-    val_dataset = KvasirVQA(
+    val_dataset = Dataset_(
         val_set['source'].to_numpy(), 
         val_set['question'].to_numpy(), 
         val_set['answer'].to_numpy(), 
         val_set['img_id'].to_numpy(),
-        kvasir_vqa_datapath
-        )
+        kvasir_vqa_datapath)
     
-    test_dataset = KvasirVQA(
+    test_dataset = Dataset_(
         test_set['source'].to_numpy(), 
         test_set['question'].to_numpy(), 
         test_set['answer'].to_numpy(), 
         test_set['img_id'].to_numpy(),
-        kvasir_vqa_datapath
-        ) 
+        kvasir_vqa_datapath) 
     
     answers = list(set(df['answer']))
     
     answer_encoder = LabelEncoder().fit(answers)
     
-    model = get_vqa_classifier(feature_extractor_name=feature_extractor_name, vocabulary_size=len(answers))
+    model = get_classifier(feature_extractor_name=feature_extractor_name, vocabulary_size=len(answers))
     
     model = model.to(device)
     
     tokenizer = get_tokenizer()
     question_encoder = get_language_model().to(device)
-    feature_extractor = init_feature_extractor(model_name=feature_extractor_name, weights_path=feature_extractor_weights_path).to(device)
+    feature_extractor = init(model_name=feature_extractor_name, weights_path=feature_extractor_weights_path).to(device)
 
     if device == 'cuda':
         torch.compile(model, 'max-autotune')
 
-    logging.info('Declaring hyper parameters')
+    logger.info('Declaring hyper parameters')
     
     # Train run hyper parameters
 
@@ -175,15 +175,15 @@ if __name__ == '__main__':
         best_acc_ckp = checkpoint['best_acc']
         run_id = checkpoint['run_id']
         run_path = f"{ROOT}/{os.getenv('CLASSIFIER_RUNS')}/{run_id}"
-        logging.info(f'Loaded run {run_id} checkpoint')
+        logger.info(f'Loaded run {run_id} checkpoint')
     else:
-        logging.info(f'New run: {run_id}')
+        logger.info(f'New run: {run_id}')
         run_path = f"{ROOT}/{os.getenv('CLASSIFIER_RUNS')}/{run_id}"
         os.mkdir(run_path)
 
-    logging.info('Starting model evaluation')
+    logger.info('Starting model evaluation')
 
-    train_loss, train_acc, val_loss, val_acc, best_acc, best_weights = classifier_evaluate(
+    train_loss, train_acc, val_loss, val_acc, best_acc, best_weights = evaluate(
         model=model, 
         num_epochs=num_epochs, 
         batch_size=batch_size,
@@ -205,14 +205,13 @@ if __name__ == '__main__':
         val_acc_ckp = val_acc_ckp,
         best_acc_ckp = best_acc_ckp,
         start_epoch = start_epoch,
-        run_id=run_id,
-        logging=logging)
+        run_id=run_id)
     
-    logging.info(f'Evaluation ended in {len(train_loss)} epochs')
+    logger.info(f'Evaluation ended in {len(train_loss)} epochs')
     
-    torch.save(best_weights, f"{ROOT}/{run_path}/model.pt")
+    torch.save(best_weights, f"{run_path}/model.pt")
 
-    with open(f"{ROOT}/{run_path}/run.json", "w") as f:
+    with open(f"{run_path}/run.json", "w") as f:
         config = vars(args)
         config['train_loss'] = train_loss
         config['val_loss'] = val_loss
@@ -244,7 +243,7 @@ if __name__ == '__main__':
         shutil.copyfile(f"{ROOT}/{os.getenv('CLASSIFIER_RUNS')}/{run}/run.json", 
                         f"{ROOT}/{os.getenv('CLASSIFIER_RUN')}")
         
-        logging.info(f'New best run: {best_run}')
+        logger.info(f'New best run: {best_run}')
 
     plot_run(base_path=f"{ROOT}/{os.getenv('CLASSIFIER_RUNS')}", run_id=run_id)
 

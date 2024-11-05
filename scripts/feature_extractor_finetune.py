@@ -1,21 +1,23 @@
+import sys
+sys.path.append('src')
+
 import os
 import torch
 import json
-from dotenv import load_dotenv
-from torch import optim
-from torch.nn import CrossEntropyLoss
 import torch.optim as optim
-from datetime import datetime
 import shutil
 import logging
-from ..src.model import EarlyStopper
-from ..src.util import generate_run_id, ROOT, plot_run, init_logger
-from ..src.dataset import FeatureExtractor, prepare_feature_extractor_data, df_train_test_split, feature_extractor_class_names
-from ..src.model import get_feature_extractor_model, feature_extractor_evaluate
-from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR
 import argparse
+from dotenv import load_dotenv
+from common.earlystop import EarlyStopper
+from common.util import generate_run_id, ROOT, plot_run, init_logger, df_train_test_split
+from feature_extractor.data import _Dataset, prepare_data, get_class_names
+from feature_extractor.model import get_model, evaluate
+from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR
+from torch import optim
+from torch.nn import CrossEntropyLoss
 
-init_logger()
+init_logger(logging)
 load_dotenv()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -33,7 +35,7 @@ if __name__ == '__main__':
     parser.add_argument('--patience', help="usually 0.001")
     parser.add_argument('--min_delta', help="depends on how sensitive you want the early stopper to be")
     parser.add_argument('--mode', help="'min' for Adam optimizer")
-    parser.add_argument('--scheduler', help="'cosine', 'plateau' or 'linear'")
+    parser.add_argument('--scheduler', help="'cosine', 'plateau' and 'linear'. write as a csv row for multiple schedulers")
     parser.add_argument('--optimizer', help="'sgd', 'adam' or 'adamw")
     parser.add_argument('--weight_decay', help="1e-2 or 1e-3")
     parser.add_argument('--model', help="'resnet50', 'resnet101', 'resnet152' or 'vgg16'")
@@ -48,39 +50,38 @@ if __name__ == '__main__':
 
     model_name = args.model or 'resnet152'
 
+    logging.info('Generating run id')
     run_id = generate_run_id()
     
     use_aug = args.aug == '1'
     
     csv_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_CSV_AUG')}" if use_aug else f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_CSV')}"
     
-    dataset = prepare_feature_extractor_data(csv_path, aug=use_aug)    
+    dataset = prepare_data(csv_path, aug=use_aug)    
 
-    class_names = feature_extractor_class_names()
+    class_names = get_class_names()
     
     train_set, val_set = df_train_test_split(dataset, 0.2) 
 
     logging.info('Building dataloaders...')
     
-    train_dataset = FeatureExtractor(
+    train_dataset = _Dataset(
         train_set['path'].to_numpy(), 
         train_set['label'].to_numpy(), 
         train_set['code'].to_numpy(), 
-        train_set['bbox'].to_numpy(), 
-        train=True)
+        train_set['bbox'].to_numpy())
     
-    val_dataset = FeatureExtractor(
+    val_dataset = _Dataset(
         val_set['path'].to_numpy(), 
         val_set['label'].to_numpy(), 
         val_set['code'].to_numpy(), 
-        val_set['bbox'].to_numpy(), 
-        train=False) 
+        val_set['bbox'].to_numpy()) 
 
     num_classes = len(class_names)
 
     logging.info('Recovering base model...')
 
-    model = get_feature_extractor_model(model_name=model_name, num_classes=num_classes, freeze=freeze)
+    model = get_model(model_name=model_name, num_classes=num_classes, freeze=freeze)
 
     if device == 'cuda':
         torch.compile(model, 'max-autotune')
@@ -166,7 +167,7 @@ if __name__ == '__main__':
 
     logging.info('Starting model evaluation')
 
-    train_loss, train_acc, val_loss, val_acc, best_acc, best_weights = feature_extractor_evaluate(
+    train_loss, train_acc, val_loss, val_acc, best_acc, best_weights = evaluate(
         model=model, 
         num_epochs=num_epochs, 
         batch_size=batch_size,
@@ -184,14 +185,13 @@ if __name__ == '__main__':
         val_acc_ckp = val_acc_ckp,
         best_acc_ckp = best_acc_ckp,
         start_epoch = start_epoch,
-        run_id=run_id,
-        logging=logging)
+        run_id=run_id)
     
     logging.info(f'Evaluation ended in {len(train_loss)} epochs')
     
-    torch.save(best_weights, f"{ROOT}/{run_path}/model.pt")
+    torch.save(best_weights, f"{run_path}/model.pt")
 
-    with open(f"{ROOT}/{run_path}/run.json", "w") as f:
+    with open(f"{run_path}/run.json", "w") as f:
         config = vars(args)
         config['train_loss'] = train_loss
         config['val_loss'] = val_loss

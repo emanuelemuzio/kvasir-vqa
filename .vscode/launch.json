@@ -9,8 +9,8 @@
             "console": "integratedTerminal",
             "args": [
                 "--turnoff=-1",
-                "--num_epochs=300",
-                "--batch_size=24",
+                "--num_epochs=1",
+                "--batch_size=32",
                 "--lr=0.002",
                 "--momentum=0.9",
                 "--T_max=10",
@@ -21,9 +21,9 @@
                 "--optimizer=sgd",
                 "--mode=min",
                 "--weight_decay=0.01",
-                "--model=resnet152",
+                "--model=resnet50",
                 "--freeze=1",
-                "--aug=1"
+                "--aug=0"
             ]
         },
         {
@@ -34,19 +34,19 @@
             "console": "integratedTerminal",
             "args": [
                 "--turnoff=-1",
-                "--num_epochs=100",
-                "--batch_size=64",
+                "--num_epochs=1",
+                "--batch_size=32",
                 "--lr=0.001",
                 "--momentum=0.9",
                 "--T_max=100",
                 "--eta_min=0.001",
                 "--patience=10",
                 "--min_delta=0.0025",
-                "--scheduler=plateau",
-                "--optimizer=adam",
+                "--scheduler=cosine,plateau",
+                "--optimizer=sgd",
                 "--mode=min",
                 "--weight_decay=0.01",
-                "--feature_extractor=28102024003804"
+                "--feature_extractor=05112024014600"
             ]
         },
         {
