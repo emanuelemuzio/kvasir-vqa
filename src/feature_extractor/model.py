@@ -194,6 +194,7 @@ def evaluate(model,
 
     for epoch in tqdm(range(start_epoch, num_epochs + 1)):
         torch.cuda.empty_cache()
+        
         epoch_train_loss, epoch_train_acc = train(model, train_dataloader, criterion, optimizer, class_names, device, scheduler)
         train_loss.append(epoch_train_loss)
         train_acc.append(epoch_train_acc)
@@ -269,11 +270,11 @@ def train(model, train_dataset, criterion, optimizer, class_names, device, sched
     train_acc = 0.0
 
     for i, (img, label, __, _) in enumerate(train_dataset):
-
+        torch.cuda.empty_cache()
+        optimizer.zero_grad()
+        
         img = img.to(device)
         label = (torch.tensor((label2id_list(label, class_names)))).to(device)
-
-        optimizer.zero_grad()
 
         output = model(img)
 
@@ -334,10 +335,10 @@ def val(model, val_dataset, criterion, optimizer, class_names, device):
         
     with torch.no_grad():
         for i, (img, label, _, _) in enumerate(val_dataset):
+            torch.cuda.empty_cache()
+            
             img = img.unsqueeze(0).to(device)[0]
             label = (torch.tensor((label2id_list(label, class_names)))).to(device)
-
-            optimizer.zero_grad()
 
             output = model(img)
 

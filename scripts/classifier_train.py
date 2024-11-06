@@ -12,6 +12,7 @@ import torch.optim as optim
 import shutil
 from common.earlystop import EarlyStopper
 from common.util import get_run_info, generate_run_id, ROOT, logger, plot_run, df_train_test_split
+from common.prompt_tuning import PromptTuning
 from classifier.data import Dataset_
 from classifier.model import evaluate, get_classifier
 from question_encode.model import get_tokenizer, get_language_model 
@@ -46,6 +47,8 @@ if __name__ == '__main__':
     
     feature_extractor_run_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{args.feature_extractor}/run.json"
     feature_extractor_weights_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{args.feature_extractor}/model.pt"
+    
+    prompt_tuning = PromptTuning(os.getenv('PROMPT_TUNING_MODEL'))
     
     feature_extractor_name = get_run_info(run_path=feature_extractor_run_path)['model'] 
     
@@ -91,9 +94,7 @@ if __name__ == '__main__':
     
     answer_encoder = LabelEncoder().fit(answers)
     
-    model = get_classifier(feature_extractor_name=feature_extractor_name, vocabulary_size=len(answers))
-    
-    model = model.to(device)
+    model = get_classifier(feature_extractor_name=feature_extractor_name, vocabulary_size=len(answers)).to(device)
     
     tokenizer = get_tokenizer()
     question_encoder = get_language_model().to(device)
@@ -127,31 +128,6 @@ if __name__ == '__main__':
 
     patience = int(args.patience) or 5
     min_delta = float(args.min_delta) or 0.01
-    
-    # Define optimizer, scheduler and early stop
-
-    optimizer = None
-
-    if args.optimizer == 'sgd':
-        optimizer = optim.SGD(model.parameters(), lr=lr, momentum=momentum)
-    elif args.optimizer == 'adam':
-        optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
-    elif args.optimizer == 'adamw':
-        optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-        
-    early_stopper = EarlyStopper(patience=patience, min_delta=min_delta)
-
-    scheduler = []
-    
-    scheduler_names = args.scheduler.split(',')
-
-    for name in scheduler_names:
-        if args.scheduler == 'plateau':
-            scheduler.append(ReduceLROnPlateau(optimizer=optimizer, mode=mode))
-        elif args.scheduler == 'cosine':
-            scheduler.append(CosineAnnealingLR(optimizer=optimizer, T_max=T_max, eta_min=eta_min))
-        elif args.scheduler == 'linear':
-            scheduler.append(LinearLR(optimizer=optimizer))
         
     max_length = int(os.getenv('MAX_QUESTION_LENGTH'))
 
@@ -180,11 +156,37 @@ if __name__ == '__main__':
         logger.info(f'New run: {run_id}')
         run_path = f"{ROOT}/{os.getenv('CLASSIFIER_RUNS')}/{run_id}"
         os.mkdir(run_path)
+        
+    # Define optimizer, scheduler and early stop
+
+    optimizer = None
+
+    if args.optimizer == 'sgd':
+        optimizer = optim.SGD(model.parameters(), lr=lr, momentum=momentum)
+    elif args.optimizer == 'adam':
+        optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    elif args.optimizer == 'adamw':
+        optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+        
+    early_stopper = EarlyStopper(patience=patience, min_delta=min_delta)
+
+    scheduler = []
+    
+    scheduler_names = args.scheduler.split(',')
+
+    for name in scheduler_names:
+        if args.scheduler == 'plateau':
+            scheduler.append(ReduceLROnPlateau(optimizer=optimizer, mode=mode))
+        elif args.scheduler == 'cosine':
+            scheduler.append(CosineAnnealingLR(optimizer=optimizer, T_max=T_max, eta_min=eta_min))
+        elif args.scheduler == 'linear':
+            scheduler.append(LinearLR(optimizer=optimizer))
 
     logger.info('Starting model evaluation')
 
     train_loss, train_acc, val_loss, val_acc, best_acc, best_weights = evaluate(
         model=model, 
+        prompt_tuning=prompt_tuning,
         num_epochs=num_epochs, 
         batch_size=batch_size,
         optimizer=optimizer, 

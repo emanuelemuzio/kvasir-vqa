@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 import torch
 from common.util import ROOT, logger
+from common.prompt_tuning import PromptTuning
 import numpy as np
 from dotenv import load_dotenv
 from torcheval.metrics.functional import multiclass_accuracy
@@ -50,51 +51,41 @@ class Classifier(nn.Module):
     '''
     
     def __init__(
-        self, 
+        self,
         vocabulary_size : int,
-        multimodal_fusion_dim : int,
-        intermediate_dim : int, 
-    ):
+        question_embedding_dim : int,
+        image_feature_dim : int,
+        intermediate_dim=512):
         
-        super(Classifier, self).__init__()
+        super(Classifier, self).__init__() 
         
-        self.multimodal_fusion = nn.Sequential(
-            nn.Linear(multimodal_fusion_dim, intermediate_dim),
+        self.prepare_multimodal_v = nn.Sequential(
+            nn.Linear(image_feature_dim, intermediate_dim),
             nn.ReLU(),
             nn.Dropout(0.5)
         )
-            
+        
+        self.prepare_multimodal_q = nn.Sequential(
+            nn.Linear(question_embedding_dim, intermediate_dim),
+            nn.ReLU(),
+            nn.Dropout(0.5)
+        )
+        
         self.classifier = nn.Sequential(
             nn.Linear(intermediate_dim, vocabulary_size),
+            nn.Sigmoid()
         )
-
-    def forward(self, concat_output): 
-
-        # max_length = int(os.getenv('MAX_QUESTION_LENGTH'))
-        # inputs = self.tokenizer(question, 
-        #                 add_special_tokens=True, 
-        #                 return_tensors='pt', 
-        #                 padding='max_length', 
-        #                 max_length=max_length, 
-        #                 truncation=True)
-
-        # input_ids = inputs['input_ids'].to(self.device)
-        # token_type_ids = inputs['token_type_ids'].to(self.device)
-        # attention_mask = inputs['attention_mask'].to(self.device)
-
-        # question_encoding = self.question_encoder(input_ids, attention_mask = attention_mask, token_type_ids = token_type_ids).last_hidden_state
         
-        # question_encoding = question_encoding[:,0,:].squeeze()
+    def forward(self, encoded_question, feature_vector): 
         
-        # image_feature = self.feature_extractor(preprocessed_image).squeeze()
+        v = self.prepare_multimodal_v(feature_vector)
+        q = self.prepare_multimodal_q(encoded_question)
         
-        # concat_output = torch.cat([image_feature, question_encoding], dim=1)
+        h = torch.mul(v, q)
         
-        multimodal_fusion = self.multimodal_fusion(concat_output)
+        logits = self.classifier(h)
         
-        logits = self.classifier(multimodal_fusion)
-        
-        return logits
+        return logits 
     
     
     
@@ -118,19 +109,21 @@ def get_classifier(feature_extractor_name=None, vocabulary_size=0):
     ------
     '''
     
-    multimodal_fusion_dim = 0
+    question_embedding_dim = int(os.getenv('EMBEDDING_DIM'))
+    image_feature_dim = -1
     
     intermediate_dim = int(os.getenv('CLASSIFIER_INTERMEDIATE_DIM'))
     
     if feature_extractor_name.startswith('resnet'):
-        multimodal_fusion_dim = int(os.getenv('EMBEDDING_SIZE')) + int(os.getenv('RESNET_FEATURE_SIZE'))
+        image_feature_dim = int(os.getenv('RESNET_FEATURE_SIZE'))
     elif feature_extractor_name.startswith('vgg'):
-        multimodal_fusion_dim = int(os.getenv('EMBEDDING_SIZE')) + int(os.getenv('VGG_FEATURE_SIZE'))
+        image_feature_dim = int(os.getenv('VGG_FEATURE_SIZE'))
     
     classifier = Classifier(
         vocabulary_size=vocabulary_size,
-        multimodal_fusion_dim=multimodal_fusion_dim,
-        intermediate_dim=intermediate_dim 
+        question_embedding_dim=question_embedding_dim,
+        image_feature_dim=image_feature_dim,
+        intermediate_dim=intermediate_dim
     )
     
     return classifier
@@ -139,6 +132,7 @@ def get_classifier(feature_extractor_name=None, vocabulary_size=0):
 
 def evaluate(
             model : Classifier, 
+            prompt_tuning : PromptTuning,
             num_epochs : int, 
             batch_size : int, 
             optimizer : torch.optim, 
@@ -250,6 +244,7 @@ def evaluate(
 
         epoch_train_loss, epoch_train_acc = train(
             model,
+            prompt_tuning,
             train_dataloader, 
             criterion, 
             optimizer, 
@@ -267,9 +262,9 @@ def evaluate(
         
         epoch_val_loss, epoch_val_acc = val(
             model, 
+            prompt_tuning,
             val_dataloader, 
             criterion, 
-            optimizer, 
             answer_encoder, 
             max_length, 
             question_encoder,
@@ -311,7 +306,8 @@ def evaluate(
 
 
 def train(
-    model : Classifier, 
+    model : Classifier,
+    prompt_tuning : PromptTuning, 
     train_dataset : Dataset_, 
     criterion : torch.nn, 
     optimizer : torch.optim, 
@@ -368,40 +364,36 @@ def train(
 
     for i, (img, question, answer) in enumerate(train_dataset):
         
+        prompt = prompt_tuning.generate(question=question)
+        
+        tuned_question = list(map(lambda x: x[0] + x[1], list(zip(question, prompt))))
+        
+        optimizer.zero_grad()
+        
         inputs = tokenizer(
-                        question, 
+                        tuned_question, 
                         add_special_tokens=True, 
                         return_tensors='pt', 
                         padding='max_length', 
                         max_length=max_length, 
-                        truncation=True)
+                        truncation=True).to(device)
         
-        inputs = inputs.to(device)
+        input_ids = inputs['input_ids'].to(device)
+        token_type_ids = inputs['token_type_ids'].to(device)
+        attention_mask = inputs['attention_mask'].to(device)
 
-        input_ids = inputs['input_ids']
-        token_type_ids = inputs['token_type_ids']
-        attention_mask = inputs['attention_mask']
-
-        question_encoding = question_encoder(input_ids, attention_mask = attention_mask, token_type_ids = token_type_ids).last_hidden_state
-        
-        question_encoding = question_encoding[:,0,:].squeeze()
+        word_embeddings = question_encoder(input_ids, attention_mask = attention_mask, token_type_ids = token_type_ids).last_hidden_state[:,0,:].squeeze().to(device)
         
         img = img.to(device)
         
         image_feature = feature_extractor(img).squeeze()
         
-        concat_output = torch.cat([image_feature, question_encoding], dim=1)
-        
-        output = model(concat_output)
+        output = model(word_embeddings, image_feature)
         
         target = (torch.tensor(answer_encoder.transform(answer))).to(device)
-        
-        optimizer.zero_grad()
 
         loss = criterion(output, target)
-
         loss.backward()
-
         optimizer.step() 
         
         acc = multiclass_accuracy(output, target) 
@@ -425,9 +417,9 @@ def train(
 
 def val(
     model : Classifier, 
+    prompt_tuning: PromptTuning,
     val_dataset : Dataset_, 
-    criterion : torch.nn, 
-    optimizer : torch.optim, 
+    criterion : torch.nn,  
     answer_encoder : LabelEncoder, 
     max_length : int,
     question_encoder : AutoModel,
@@ -479,36 +471,32 @@ def val(
     with torch.no_grad():
         for i, (img, question, answer) in enumerate(val_dataset):
             
+            prompt = prompt_tuning.generate(question=question)
+        
+            tuned_question = list(map(lambda x: x[0] + x[1], list(zip(question, prompt))))
+            
             inputs = tokenizer(
-                        question, 
+                        tuned_question, 
                         add_special_tokens=True, 
                         return_tensors='pt', 
                         padding='max_length', 
                         max_length=max_length, 
-                        truncation=True)
+                        truncation=True).to(device)
         
-            inputs = inputs.to(device)
-        
-            input_ids = inputs['input_ids']
-            token_type_ids = inputs['token_type_ids']
-            attention_mask = inputs['attention_mask']
+            input_ids = inputs['input_ids'].to(device)
+            token_type_ids = inputs['token_type_ids'].to(device)
+            attention_mask = inputs['attention_mask'].to(device)
 
-            question_encoding = question_encoder(input_ids, attention_mask = attention_mask, token_type_ids = token_type_ids).last_hidden_state
-            
-            question_encoding = question_encoding[:,0,:].squeeze()
+            word_embeddings = question_encoder(input_ids, attention_mask = attention_mask, token_type_ids = token_type_ids).last_hidden_state[:,0,:].squeeze().to(device)
             
             img = img.to(device)
             
             image_feature = feature_extractor(img).squeeze()
             
-            concat_output = torch.cat([image_feature, question_encoding], dim=1)
-            
-            output = model(concat_output)
+            output = model(word_embeddings, image_feature) 
             
             target = (torch.tensor(answer_encoder.transform(answer))).to(device)
-
-            optimizer.zero_grad()
-
+            
             loss = criterion(output, target)
             
             acc = multiclass_accuracy(output, target)

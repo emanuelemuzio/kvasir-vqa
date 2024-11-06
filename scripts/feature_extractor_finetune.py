@@ -81,7 +81,7 @@ if __name__ == '__main__':
 
     logging.info('Recovering base model...')
 
-    model = get_model(model_name=model_name, num_classes=num_classes, freeze=freeze)
+    model = get_model(model_name=model_name, num_classes=num_classes, freeze=freeze).to(device)
 
     if device == 'cuda':
         torch.compile(model, 'max-autotune')
@@ -111,33 +111,6 @@ if __name__ == '__main__':
 
     patience = int(args.patience) or 5
     min_delta = float(args.min_delta) or 0.01
-    
-    # Define optimizer, scheduler and early stop
-
-    optimizer = None
-
-    if args.optimizer == 'sgd':
-        optimizer = optim.SGD(model.parameters(), lr=lr, momentum=momentum)
-    elif args.optimizer == 'adam':
-        optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
-    elif args.optimizer == 'adamw':
-        optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-        
-    early_stopper = EarlyStopper(patience=patience, min_delta=min_delta)
-
-    scheduler = []
-    
-    scheduler_names = args.scheduler.split(',')
-
-    for name in scheduler_names:
-        if args.scheduler == 'plateau':
-            scheduler.append(ReduceLROnPlateau(optimizer=optimizer, mode=mode))
-        elif args.scheduler == 'cosine':
-            scheduler.append(CosineAnnealingLR(optimizer=optimizer, T_max=T_max, eta_min=eta_min))
-        elif args.scheduler == 'linear':
-            scheduler.append(LinearLR(optimizer=optimizer))
-
-    model.to(device)
 
     train_loss_ckp = None
     train_acc_ckp = None
@@ -164,6 +137,31 @@ if __name__ == '__main__':
         logging.info(f'New run: {run_id}')
         run_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{run_id}"
         os.mkdir(run_path)
+        
+        # Define optimizer, scheduler and early stop
+
+    optimizer = None
+
+    if args.optimizer == 'sgd':
+        optimizer = optim.SGD(model.parameters(), lr=lr, momentum=momentum)
+    elif args.optimizer == 'adam':
+        optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    elif args.optimizer == 'adamw':
+        optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+        
+    early_stopper = EarlyStopper(patience=patience, min_delta=min_delta)
+
+    scheduler = []
+    
+    scheduler_names = args.scheduler.split(',')
+
+    for name in scheduler_names:
+        if args.scheduler == 'plateau':
+            scheduler.append(ReduceLROnPlateau(optimizer=optimizer, mode=mode))
+        elif args.scheduler == 'cosine':
+            scheduler.append(CosineAnnealingLR(optimizer=optimizer, T_max=T_max, eta_min=eta_min))
+        elif args.scheduler == 'linear':
+            scheduler.append(LinearLR(optimizer=optimizer))
 
     logging.info('Starting model evaluation')
 

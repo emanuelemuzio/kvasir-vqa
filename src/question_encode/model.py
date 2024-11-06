@@ -10,7 +10,7 @@ load_dotenv()
  
  
     
-def get_tokenizer(model_name=os.getenv('LANGUAGE_MODEL')):
+def get_tokenizer(model_name=os.getenv('LANGUAGE_MODEL')) -> AutoTokenizer:
     
     '''
     Tokenizer inizialization function.
@@ -34,7 +34,7 @@ def get_tokenizer(model_name=os.getenv('LANGUAGE_MODEL')):
 
 
 
-def get_language_model(model_name=os.getenv('LANGUAGE_MODEL')):
+def get_language_model(model_name=os.getenv('LANGUAGE_MODEL')) -> AutoModel:
     
     '''
     Small utility function for recovering the model used for the word embeddings
