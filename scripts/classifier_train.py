@@ -225,27 +225,7 @@ if __name__ == '__main__':
 
     os.remove(f"{ROOT}/{os.getenv('CLASSIFIER_CHECKPOINT')}")
 
-    runs = os.listdir(f"{ROOT}/{os.getenv('CLASSIFIER_RUNS')}")
-    best_run = None
-
-    if len(runs) > 0:
-        runs_best_acc = 0
-        for run in runs:
-            if os.path.exists(f"{ROOT}/{os.getenv('CLASSIFIER_RUNS')}/{run}/run.json"):
-                with open(f"{ROOT}/{os.getenv('CLASSIFIER_RUNS')}/{run}/run.json", 'r') as f:
-                    data = json.load(f)
-                    runs_best_acc = data['best_acc'] if data['best_acc'] > runs_best_acc else runs_best_acc
-                    best_run = run
-        if os.path.exists(f"{ROOT}/{os.getenv('CLASSIFIER_MODEL')}"):
-            os.remove(f"{ROOT}/{os.getenv('CLASSIFIER_MODEL')}")
-        
-        shutil.copyfile(f"{ROOT}/{os.getenv('CLASSIFIER_RUNS')}/{run}/model.pt", 
-                        f"{ROOT}/{os.getenv('CLASSIFIER_MODEL')}")
-        
-        shutil.copyfile(f"{ROOT}/{os.getenv('CLASSIFIER_RUNS')}/{run}/run.json", 
-                        f"{ROOT}/{os.getenv('CLASSIFIER_RUN')}")
-        
-        logger.info(f'New best run: {best_run}')
+    runs = os.listdir(f"{ROOT}/{os.getenv('CLASSIFIER_RUNS')}") 
 
     plot_run(base_path=f"{ROOT}/{os.getenv('CLASSIFIER_RUNS')}", run_id=run_id)
 
