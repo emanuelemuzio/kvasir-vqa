@@ -64,8 +64,13 @@ def get_model(model_name='resnet152', num_classes=0, freeze='2'):
         model = models.vgg16()
         model.classifier[6] = nn.Linear(in_features=4096, out_features=num_classes)
 
-    if model_name.startswith('vgg'):
+    elif model_name == 'vitb16':
+        model = models.vit_b_16()
+        model.heads[0] = nn.Linear(768, out_features=num_classes)
+        
+        
 
+    if model_name.startswith('vgg'):
         if freeze == '0':
             for param in model.parameters():
                 param.requires_grad = False
@@ -81,13 +86,25 @@ def get_model(model_name='resnet152', num_classes=0, freeze='2'):
                 param.requires_grad = True 
                 
     elif model_name.startswith('resnet'):
-        
         if freeze == '0':
             for param in model.parameters():
                 param.requires_grad = False
         
         elif freeze == '1':
             for param in model.layer4.parameters():
+                param.requires_grad = True
+        
+        elif freeze == '2':
+            for param in model.parameters():
+                param.requires_grad = True
+                
+    elif model_name.startswith('vit'):
+        if freeze == '0':
+            for param in model.parameters():
+                param.requires_grad = False
+        
+        elif freeze == '1':
+            for param in model.heads[0].parameters():
                 param.requires_grad = True
         
         elif freeze == '2':

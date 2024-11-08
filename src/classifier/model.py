@@ -118,6 +118,8 @@ def get_classifier(feature_extractor_name=None, vocabulary_size=0):
         image_feature_dim = int(os.getenv('RESNET_FEATURE_SIZE'))
     elif feature_extractor_name.startswith('vgg'):
         image_feature_dim = int(os.getenv('VGG_FEATURE_SIZE'))
+    elif feature_extractor_name.startswith('vit'):
+        image_feature_dim = int(os.getenv('VIT_FEATURE_SIZE'))
     
     classifier = Classifier(
         vocabulary_size=vocabulary_size,

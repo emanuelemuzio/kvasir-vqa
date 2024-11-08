@@ -1,11 +1,13 @@
 import sys
 sys.path.append('src')
 
+import warnings
+warnings.filterwarnings('ignore')
+
 import os
 import torch
 import json
 import torch.optim as optim
-import shutil
 import logging
 import argparse
 from dotenv import load_dotenv

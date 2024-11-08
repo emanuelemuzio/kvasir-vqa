@@ -1,6 +1,9 @@
 import sys
 sys.path.append('src')
 
+import warnings
+warnings.filterwarnings('ignore')
+
 import os
 import torch
 import pandas as pd
