@@ -364,11 +364,11 @@ def train(
 
     for i, (img, question, answer) in enumerate(train_dataset):
         
+        optimizer.zero_grad()
+
         prompt = prompt_tuning.generate(question=question)
         
         tuned_question = list(map(lambda x: x[0] + x[1], list(zip(question, prompt))))
-        
-        optimizer.zero_grad()
         
         inputs = tokenizer(
                         tuned_question, 
@@ -479,7 +479,7 @@ def val(
                         tuned_question, 
                         add_special_tokens=True, 
                         return_tensors='pt', 
-                        padding='max_length', 
+                        padding='longest', 
                         max_length=max_length, 
                         truncation=True).to(device)
         

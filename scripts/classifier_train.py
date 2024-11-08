@@ -94,7 +94,7 @@ if __name__ == '__main__':
     
     answer_encoder = LabelEncoder().fit(answers)
     
-    model = get_classifier(feature_extractor_name=feature_extractor_name, vocabulary_size=len(answers)).to(device)
+    model = (get_classifier(feature_extractor_name=feature_extractor_name, vocabulary_size=len(answers))).to(device)
     
     tokenizer = get_tokenizer()
     question_encoder = get_language_model().to(device)
