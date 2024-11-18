@@ -3,7 +3,7 @@ import ollama
 class PromptTuning:
     
     '''
-    Prompt tuning for VQA enhancing
+    Chain of thought mechanism for VQA enhancing
     
     ----------
     Parameters

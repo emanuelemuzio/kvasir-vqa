@@ -12,7 +12,6 @@ from dotenv import load_dotenv
 from torch import optim
 from torch.nn import CrossEntropyLoss
 import torch.optim as optim 
-import shutil
 from common.earlystop import EarlyStopper
 from common.util import get_run_info, generate_run_id, ROOT, logger, plot_run, df_train_test_split
 from common.prompt_tuning import PromptTuning
@@ -45,6 +44,7 @@ if __name__ == '__main__':
     parser.add_argument('--optimizer', help="'sgd', 'adam' or 'adamw")
     parser.add_argument('--weight_decay', help="1e-2 or 1e-3")
     parser.add_argument('--feature_extractor', help="use the run id in order to retrieve automatically the backbone used for the feature extraction")
+    parser.add_argument('--architecture', help="'concat', 'hadamard'")
 
     args = parser.parse_args()
     
@@ -58,6 +58,8 @@ if __name__ == '__main__':
     run_id = generate_run_id()
 
     turnoff = int(args.turnoff)
+    
+    architecture = args.architecture 
 
     logger.info('Recovering classifier model...')
 
@@ -97,7 +99,7 @@ if __name__ == '__main__':
     
     answer_encoder = LabelEncoder().fit(answers)
     
-    model = (get_classifier(feature_extractor_name=feature_extractor_name, vocabulary_size=len(answers))).to(device)
+    model = (get_classifier(feature_extractor_name=feature_extractor_name, vocabulary_size=len(answers), architecture=architecture)).to(device)
     
     tokenizer = get_tokenizer()
     question_encoder = get_language_model().to(device)

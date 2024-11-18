@@ -33,6 +33,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
+                "--architecture=concat",
                 "--turnoff=0",
                 "--num_epochs=100",
                 "--batch_size=32",
@@ -46,7 +47,7 @@
                 "--optimizer=sgd",
                 "--mode=min",
                 "--weight_decay=0.01",
-                "--feature_extractor=05112024120001"
+                "--feature_extractor=08112024021141"
             ]
         },
         {

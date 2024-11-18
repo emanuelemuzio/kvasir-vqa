@@ -4,7 +4,6 @@ sys.path.append('src')
 import gc
 from sklearn.preprocessing import LabelEncoder
 import os
-import torch.nn as nn
 from transformers import AutoTokenizer, AutoModel
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
@@ -16,80 +15,11 @@ from dotenv import load_dotenv
 from torcheval.metrics.functional import multiclass_accuracy
 from common.earlystop import EarlyStopper
 from classifier.data import Dataset_
+from classifier.architecture import HadamardClassifier, ConcatClassifier
 
-load_dotenv() 
-
-
-
-class Classifier(nn.Module):
+load_dotenv()      
     
-    '''
-    Core of the project, the classifier that uses the joint embeddings method.
-    
-    Builder parameters
-    ------------------
-        vocabulary_size: int
-            N answers known to the model
-        multimodal_fusion_dim: int
-            Dimension of the multimodal fusion between the question encoding and
-            the feature extraced from the image
-        intermediate_dim: int
-            output of the linear layer during used in the multimodal fusion
-    ------------------
-    
-    Forward input
-    ------
-        concat_output: tensor
-            Concat tensor that consists of the question and visual encodes
-    ------
-    
-    Forward output
-    ------
-        logits: tensor
-            Answers soft scores
-    ------
-    '''
-    
-    def __init__(
-        self,
-        vocabulary_size : int,
-        question_embedding_dim : int,
-        image_feature_dim : int,
-        intermediate_dim=512):
-        
-        super(Classifier, self).__init__() 
-        
-        self.prepare_multimodal_v = nn.Sequential(
-            nn.Linear(image_feature_dim, intermediate_dim),
-            nn.ReLU(),
-            nn.Dropout(0.5)
-        )
-        
-        self.prepare_multimodal_q = nn.Sequential(
-            nn.Linear(question_embedding_dim, intermediate_dim),
-            nn.ReLU(),
-            nn.Dropout(0.5)
-        )
-        
-        self.classifier = nn.Sequential(
-            nn.Linear(intermediate_dim, vocabulary_size),
-            nn.Sigmoid()
-        )
-        
-    def forward(self, encoded_question, feature_vector): 
-        
-        v = self.prepare_multimodal_v(feature_vector)
-        q = self.prepare_multimodal_q(encoded_question)
-        
-        h = torch.mul(v, q)
-        
-        logits = self.classifier(h)
-        
-        return logits 
-    
-    
-    
-def get_classifier(feature_extractor_name=None, vocabulary_size=0):
+def get_classifier(feature_extractor_name=None, vocabulary_size=0, architecture=None):
     
     '''
     Classifier initialization function
@@ -120,20 +50,30 @@ def get_classifier(feature_extractor_name=None, vocabulary_size=0):
         image_feature_dim = int(os.getenv('VGG_FEATURE_SIZE'))
     elif feature_extractor_name.startswith('vit'):
         image_feature_dim = int(os.getenv('VIT_FEATURE_SIZE'))
+        
+    classifier = None
     
-    classifier = Classifier(
+    if architecture == 'hadamard':
+        classifier = HadamardClassifier(
         vocabulary_size=vocabulary_size,
         question_embedding_dim=question_embedding_dim,
         image_feature_dim=image_feature_dim,
         intermediate_dim=intermediate_dim
-    )
+        )
+    elif architecture == 'concat':
+        classifier = ConcatClassifier(
+        vocabulary_size=vocabulary_size,
+        question_embedding_dim=question_embedding_dim,
+        image_feature_dim=image_feature_dim,
+        intermediate_dim=intermediate_dim
+        )
     
     return classifier
 
 
 
 def evaluate(
-            model : Classifier, 
+            model : ConcatClassifier|HadamardClassifier, 
             prompt_tuning : PromptTuning,
             num_epochs : int, 
             batch_size : int, 
@@ -308,7 +248,7 @@ def evaluate(
 
 
 def train(
-    model : Classifier,
+    model : ConcatClassifier|HadamardClassifier,
     prompt_tuning : PromptTuning, 
     train_dataset : Dataset_, 
     criterion : torch.nn, 
@@ -418,7 +358,7 @@ def train(
 
 
 def val(
-    model : Classifier, 
+    model : ConcatClassifier|HadamardClassifier, 
     prompt_tuning: PromptTuning,
     val_dataset : Dataset_, 
     criterion : torch.nn,  

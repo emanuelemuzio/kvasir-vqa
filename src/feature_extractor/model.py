@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from torcheval.metrics.functional import multiclass_accuracy
 from common.util import label2id_list
 from feature_extractor.data import get_class_names
+from torchvision.models import ViT_B_16_Weights 
 
 load_dotenv()  
 
@@ -409,8 +410,10 @@ def init(model_name='resnet152', weights_path=os.getenv('FEATURE_EXTRACTOR_MODEL
     if model_name.startswith('resnet'):
         feature_extractor = torch.nn.Sequential(*list(model.children())[:-1])
     elif model_name.startswith('vgg'):
-        # feature_extractor = torch.nn.Sequential(*list(model.children())[:-1])
         model.classifier = model.classifier[:-1]
+        feature_extractor = model
+    elif model_name.startswith('vit'):
+        model.heads = torch.nn.Sequential(torch.nn.Identity())
         feature_extractor = model
 
     return feature_extractor
