@@ -33,10 +33,10 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "--architecture=concat",
+                "--architecture=hadamard",
                 "--turnoff=1",
                 "--num_epochs=50",
-                "--batch_size=64",
+                "--batch_size=16",
                 "--lr=0.01",
                 "--momentum=0.9",
                 "--T_max=100",
@@ -48,17 +48,7 @@
                 "--mode=min",
                 "--weight_decay=0.01",
                 "--feature_extractor=08112024021141",
-                "--prompting=0"
-            ]
-        },
-        {
-            "name": "Test with run ID",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal",
-            "args": [
-                "--id=24102024145942"
+                "--prompting=1"
             ]
         }
     ]

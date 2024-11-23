@@ -75,9 +75,9 @@ if __name__ == '__main__':
     kvasir_vqa_datapath = f"{ROOT}/{os.getenv('KVASIR_VQA_DATA')}"
     
     if not os.path.exists(os.getenv('TEST_CSV')) and not prompting:
-        test_set.to_csv(os.getenv(os.getenv('TEST_CSV')), index=False)
-    elif os.path.exists(os.getenv('TEST_PROMPT_CSV')) and prompting:
-        test_set.to_csv(os.getenv(os.getenv('TEST_PROMPT_CSV')), index=False)
+        test_set.to_csv(os.getenv('TEST_CSV'), index=False)
+    elif not os.path.exists(os.getenv('TEST_PROMPT_CSV')) and prompting:
+        test_set.to_csv(os.getenv('TEST_PROMPT_CSV'), index=False)
     
     if prompting:
         
