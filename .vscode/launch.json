@@ -34,10 +34,10 @@
             "console": "integratedTerminal",
             "args": [
                 "--architecture=concat",
-                "--turnoff=0",
-                "--num_epochs=100",
-                "--batch_size=32",
-                "--lr=0.002",
+                "--turnoff=1",
+                "--num_epochs=50",
+                "--batch_size=64",
+                "--lr=0.01",
                 "--momentum=0.9",
                 "--T_max=100",
                 "--eta_min=0.001",
@@ -47,7 +47,8 @@
                 "--optimizer=sgd",
                 "--mode=min",
                 "--weight_decay=0.01",
-                "--feature_extractor=08112024021141"
+                "--feature_extractor=08112024021141",
+                "--prompting=0"
             ]
         },
         {

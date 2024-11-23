@@ -8,6 +8,8 @@ import random
 from dotenv import load_dotenv
 import torch
 from common.util import logger, ROOT, image_transform
+from common.prompt_tuning import PromptTuning
+import pandas as pd
 
 random_seed = 42
 
@@ -78,6 +80,8 @@ class Dataset_(Dataset):
             image identifier
         base_path: str
             base path to the correct folder
+        prompt: str
+            prompt that decorates the question
     ----------
 
     ------
@@ -85,21 +89,22 @@ class Dataset_(Dataset):
         transformed_image: tensor
             Preprocessed image
         question: str
-            question posed about the image
+            question posed about the image, prompt tuned or not
         answer: str
             self explanatory at this point
     ------
     '''
     
-    def __init__(self, source, question, answer, img_id, base_path):  
+    def __init__(self, source=[], question=[], answer=[], img_id=[],  base_path='', prompt=[]):  
         
         self.source = source
         self.question = question
         self.answer = answer
         self.img_id = img_id
         self.base_path = base_path
-         
+        self.prompt = prompt
         self.transform = image_transform()
+        self.use_prompt = len(self.prompt) > 0
         
         logger.info('Initialized Kvasir VQA Dataset')
     
@@ -108,10 +113,13 @@ class Dataset_(Dataset):
 
     def __getitem__(self, idx):
         
-        # source = self.source[idx]
         question = self.question[idx]
         answer = self.answer[idx]
         img_id = self.img_id[idx]
+        use_prompt = self.use_prompt
+        
+        if use_prompt:
+            question += self.prompt[idx]
         
         base_path = self.base_path
         
@@ -120,4 +128,33 @@ class Dataset_(Dataset):
 
         transformed_image = self.transform(img.float())
 
-        return transformed_image, question, answer 
+        return transformed_image, question, answer
+    
+    
+    
+def generate_prompt_dataset() -> None:
+    
+    try:
+        logger.info('Generating questions prompt')  
+            
+        df = pd.read_csv(os.getenv('KVASIR_VQA_CSV')) 
+            
+        questions = df['question'].unique().tolist()
+        
+        prompt_tuning = PromptTuning(os.getenv('PROMPT_TUNING_MODEL'))
+            
+        prompted_questions = prompt_tuning.generate(question=questions)
+            
+        logger.info("Finished prompt generation")
+        
+        df['prompt'] = np.nan
+                        
+        for question, prompted_question in zip(questions, prompted_questions):
+            df.loc[df['question'] == question, 'prompt'] = prompted_question
+            
+        df.to_csv(os.getenv('KVASIR_VQA_PROMPT_CSV'), index=False)
+            
+        logger.info("Csv file saved")
+    except Exception as e:
+        logger.error("An error occurred during prompt generation")
+        

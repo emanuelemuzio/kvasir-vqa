@@ -3,6 +3,7 @@ sys.path.append('src')
 
 import torch
 import torch.nn as nn
+from common.prompt_tuning import PromptTuning
 
 class HadamardClassifier(nn.Module):
     
@@ -19,6 +20,8 @@ class HadamardClassifier(nn.Module):
             the feature extraced from the image
         intermediate_dim: int
             output of the linear layer during used in the multimodal fusion
+        prompt_tuner: PromptTuning
+            will be used for generating prompt during inference
     ------------------
     
     Forward input
@@ -39,9 +42,12 @@ class HadamardClassifier(nn.Module):
         vocabulary_size : int,
         question_embedding_dim : int,
         image_feature_dim : int,
+        prompt_tuner : PromptTuning,
         intermediate_dim=512):
         
         super(HadamardClassifier, self).__init__() 
+        
+        self.prompt_tuner = prompt_tuner
         
         self.prepare_multimodal_v = nn.Sequential(
             nn.Linear(image_feature_dim, intermediate_dim),
@@ -59,6 +65,9 @@ class HadamardClassifier(nn.Module):
             nn.Linear(intermediate_dim, vocabulary_size),
             nn.Sigmoid()
         )
+        
+    def tune_question(self, question : str):
+        return self.prompt_tuner.generate(question=question)[0]
         
     def forward(self, encoded_question, feature_vector): 
         
@@ -106,9 +115,12 @@ class ConcatClassifier(nn.Module):
         vocabulary_size : int,
         question_embedding_dim : int,
         image_feature_dim : int,
+        prompt_tuner : PromptTuning,
         intermediate_dim=512):
         
         super(ConcatClassifier, self).__init__() 
+        
+        self.prompt_tuner = prompt_tuner
         
         self.multimodal_fusion = nn.Sequential(
             nn.Linear(image_feature_dim + question_embedding_dim, intermediate_dim),
@@ -120,6 +132,9 @@ class ConcatClassifier(nn.Module):
             nn.Linear(intermediate_dim, vocabulary_size),
             nn.Sigmoid()
         )
+        
+    def tune_question(self, question : str):
+        return self.prompt_tuner.generate(question=question)[0]
         
     def forward(self, encoded_question, feature_vector): 
         

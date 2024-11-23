@@ -14,7 +14,6 @@ from torch.nn import CrossEntropyLoss
 import torch.optim as optim 
 from common.earlystop import EarlyStopper
 from common.util import get_run_info, generate_run_id, ROOT, logger, plot_run, df_train_test_split
-from common.prompt_tuning import PromptTuning
 from classifier.data import Dataset_
 from classifier.model import evaluate, get_classifier
 from question_encode.model import get_tokenizer, get_language_model 
@@ -45,13 +44,14 @@ if __name__ == '__main__':
     parser.add_argument('--weight_decay', help="1e-2 or 1e-3")
     parser.add_argument('--feature_extractor', help="use the run id in order to retrieve automatically the backbone used for the feature extraction")
     parser.add_argument('--architecture', help="'concat', 'hadamard'")
+    parser.add_argument('--prompting', help="'1' for prompt aided question, else '0'")
 
     args = parser.parse_args()
     
     feature_extractor_run_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{args.feature_extractor}/run.json"
     feature_extractor_weights_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{args.feature_extractor}/model.pt"
     
-    prompt_tuning = PromptTuning(os.getenv('PROMPT_TUNING_MODEL'))
+    prompting = args.prompting == '1'
     
     feature_extractor_name = get_run_info(run_path=feature_extractor_run_path)['model'] 
     
@@ -63,43 +63,61 @@ if __name__ == '__main__':
 
     logger.info('Recovering classifier model...')
 
-    df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_CSV')}")  
+    df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_PROMPT_CSV')}") if prompting else pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_CSV')}")
     
     df.dropna(axis=0, inplace=True)
     
-    train_set, val_set = df_train_test_split(df, 0.3) 
+    train_set, val_set = df_train_test_split(df, 0.4) 
     val_set, test_set = df_train_test_split(df, 0.5) 
 
     logger.info('Building dataloaders...')
     
     kvasir_vqa_datapath = f"{ROOT}/{os.getenv('KVASIR_VQA_DATA')}"
     
-    train_dataset = Dataset_(
-        train_set['source'].to_numpy(), 
-        train_set['question'].to_numpy(), 
-        train_set['answer'].to_numpy(), 
-        train_set['img_id'].to_numpy(),
-        kvasir_vqa_datapath)
+    if not os.path.exists(os.getenv('TEST_CSV')) and not prompting:
+        test_set.to_csv(os.getenv(os.getenv('TEST_CSV')), index=False)
+    elif os.path.exists(os.getenv('TEST_PROMPT_CSV')) and prompting:
+        test_set.to_csv(os.getenv(os.getenv('TEST_PROMPT_CSV')), index=False)
     
-    val_dataset = Dataset_(
-        val_set['source'].to_numpy(), 
-        val_set['question'].to_numpy(), 
-        val_set['answer'].to_numpy(), 
-        val_set['img_id'].to_numpy(),
-        kvasir_vqa_datapath)
-    
-    test_dataset = Dataset_(
-        test_set['source'].to_numpy(), 
-        test_set['question'].to_numpy(), 
-        test_set['answer'].to_numpy(), 
-        test_set['img_id'].to_numpy(),
-        kvasir_vqa_datapath) 
+    if prompting:
+        
+        train_dataset = Dataset_(
+            source=train_set['source'].to_numpy(), 
+            question=train_set['question'].to_numpy(), 
+            answer=train_set['answer'].to_numpy(), 
+            img_id=train_set['img_id'].to_numpy(),
+            base_path=kvasir_vqa_datapath,
+            prompt=train_set['prompt'].to_numpy())
+        
+        val_dataset = Dataset_(
+            source=val_set['source'].to_numpy(), 
+            question=val_set['question'].to_numpy(), 
+            answer=val_set['answer'].to_numpy(), 
+            img_id=val_set['img_id'].to_numpy(),
+            base_path=kvasir_vqa_datapath,
+            prompt=val_set['prompt'].to_numpy())
+        
+    else:
+        
+        train_dataset = Dataset_(
+            source=train_set['source'].to_numpy(), 
+            question=train_set['question'].to_numpy(), 
+            answer=train_set['answer'].to_numpy(), 
+            img_id=train_set['img_id'].to_numpy(), 
+            base_path=kvasir_vqa_datapath)
+        
+        val_dataset = Dataset_(
+            source=val_set['source'].to_numpy(), 
+            question=val_set['question'].to_numpy(), 
+            answer=val_set['answer'].to_numpy(), 
+            img_id=val_set['img_id'].to_numpy(),
+            base_path=kvasir_vqa_datapath)
     
     answers = list(set(df['answer']))
     
     answer_encoder = LabelEncoder().fit(answers)
     
-    model = (get_classifier(feature_extractor_name=feature_extractor_name, vocabulary_size=len(answers), architecture=architecture)).to(device)
+    model = get_classifier(feature_extractor_name=feature_extractor_name, vocabulary_size=len(answers), architecture=architecture, inference=False).to(device)
     
     tokenizer = get_tokenizer()
     question_encoder = get_language_model().to(device)
@@ -191,7 +209,6 @@ if __name__ == '__main__':
 
     train_loss, train_acc, val_loss, val_acc, best_acc, best_weights = evaluate(
         model=model, 
-        prompt_tuning=prompt_tuning,
         num_epochs=num_epochs, 
         batch_size=batch_size,
         optimizer=optimizer, 

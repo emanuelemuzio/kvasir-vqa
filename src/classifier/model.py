@@ -19,7 +19,7 @@ from classifier.architecture import HadamardClassifier, ConcatClassifier
 
 load_dotenv()      
     
-def get_classifier(feature_extractor_name=None, vocabulary_size=0, architecture=None):
+def get_classifier(feature_extractor_name=None, vocabulary_size=0, architecture=None, inference=False):
     
     '''
     Classifier initialization function
@@ -30,6 +30,10 @@ def get_classifier(feature_extractor_name=None, vocabulary_size=0, architecture=
             Used for choosing the CNN base model for the feature extraction
         vocabulary_size: int
             Num. of answers that the classifier knows
+        architecture: str
+            Based on the named architecture, a different model will be used
+        inference: bool
+            True for prompt tuner instantiation, else False
     ------------------
     
     Return
@@ -38,6 +42,8 @@ def get_classifier(feature_extractor_name=None, vocabulary_size=0, architecture=
             Initialized classifier model
     ------
     '''
+    
+    prompt_tuner = PromptTuning(os.getenv('PROMPT_TUNING_MODEL')) if inference else None
     
     question_embedding_dim = int(os.getenv('EMBEDDING_DIM'))
     image_feature_dim = -1
@@ -58,14 +64,16 @@ def get_classifier(feature_extractor_name=None, vocabulary_size=0, architecture=
         vocabulary_size=vocabulary_size,
         question_embedding_dim=question_embedding_dim,
         image_feature_dim=image_feature_dim,
-        intermediate_dim=intermediate_dim
+        intermediate_dim=intermediate_dim,
+        prompt_tuner=prompt_tuner
         )
     elif architecture == 'concat':
         classifier = ConcatClassifier(
         vocabulary_size=vocabulary_size,
         question_embedding_dim=question_embedding_dim,
         image_feature_dim=image_feature_dim,
-        intermediate_dim=intermediate_dim
+        intermediate_dim=intermediate_dim,
+        prompt_tuner=prompt_tuner
         )
     
     return classifier
@@ -74,7 +82,6 @@ def get_classifier(feature_extractor_name=None, vocabulary_size=0, architecture=
 
 def evaluate(
             model : ConcatClassifier|HadamardClassifier, 
-            prompt_tuning : PromptTuning,
             num_epochs : int, 
             batch_size : int, 
             optimizer : torch.optim, 
@@ -186,7 +193,6 @@ def evaluate(
 
         epoch_train_loss, epoch_train_acc = train(
             model,
-            prompt_tuning,
             train_dataloader, 
             criterion, 
             optimizer, 
@@ -204,7 +210,6 @@ def evaluate(
         
         epoch_val_loss, epoch_val_acc = val(
             model, 
-            prompt_tuning,
             val_dataloader, 
             criterion, 
             answer_encoder, 
@@ -249,7 +254,6 @@ def evaluate(
 
 def train(
     model : ConcatClassifier|HadamardClassifier,
-    prompt_tuning : PromptTuning, 
     train_dataset : Dataset_, 
     criterion : torch.nn, 
     optimizer : torch.optim, 
@@ -306,14 +310,10 @@ def train(
 
     for i, (img, question, answer) in enumerate(train_dataset):
         
-        optimizer.zero_grad()
-
-        prompt = prompt_tuning.generate(question=question)
-        
-        tuned_question = list(map(lambda x: x[0] + x[1], list(zip(question, prompt))))
+        optimizer.zero_grad() 
         
         inputs = tokenizer(
-                        tuned_question, 
+                        question, 
                         add_special_tokens=True, 
                         return_tensors='pt', 
                         padding='max_length', 
@@ -359,7 +359,6 @@ def train(
 
 def val(
     model : ConcatClassifier|HadamardClassifier, 
-    prompt_tuning: PromptTuning,
     val_dataset : Dataset_, 
     criterion : torch.nn,  
     answer_encoder : LabelEncoder, 
@@ -413,12 +412,8 @@ def val(
     with torch.no_grad():
         for i, (img, question, answer) in enumerate(val_dataset):
             
-            prompt = prompt_tuning.generate(question=question)
-        
-            tuned_question = list(map(lambda x: x[0] + x[1], list(zip(question, prompt))))
-            
             inputs = tokenizer(
-                        tuned_question, 
+                        question, 
                         add_special_tokens=True, 
                         return_tensors='pt', 
                         padding='longest', 
