@@ -8,10 +8,10 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "--turnoff=0",
-                "--num_epochs=200",
+                "--turnoff=-1",
+                "--num_epochs=100",
                 "--batch_size=32",
-                "--lr=0.00005",
+                "--lr=0.0005",
                 "--momentum=0.9",
                 "--T_max=100",
                 "--eta_min=0.001",
@@ -21,9 +21,9 @@
                 "--optimizer=sgd",
                 "--mode=min",
                 "--weight_decay=0.01",
-                "--model=vitb16",
+                "--model=resnet50",
                 "--freeze=2",
-                "--aug=1"
+                "--aug=0"
             ]
         },
         {

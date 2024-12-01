@@ -40,7 +40,7 @@ if __name__ == '__main__':
     parser.add_argument('--scheduler', help="'cosine', 'plateau' and 'linear'. write as a csv row for multiple schedulers")
     parser.add_argument('--optimizer', help="'sgd', 'adam' or 'adamw")
     parser.add_argument('--weight_decay', help="1e-2 or 1e-3")
-    parser.add_argument('--model', help="'resnet50', 'resnet101', 'resnet152' or 'vgg16'")
+    parser.add_argument('--model', help="'resnet50', 'resnet101', 'resnet152', 'vgg16' or 'vit16b")
     parser.add_argument('--freeze', help="'0' for inference, '1' for training only the top layer or '2' for training the entire model")
     parser.add_argument('--aug', help="'1' for augmented dataset")
 
@@ -64,6 +64,7 @@ if __name__ == '__main__':
     class_names = get_class_names()
     
     train_set, val_set = df_train_test_split(dataset, 0.3) 
+    val_set, test_set = df_train_test_split(dataset, 0.66) 
 
     logging.info('Building dataloaders...')
     
@@ -78,6 +79,12 @@ if __name__ == '__main__':
         val_set['label'].to_numpy(), 
         val_set['code'].to_numpy(), 
         val_set['bbox'].to_numpy()) 
+    
+    test_dataset = _Dataset(
+        test_set['path'].to_numpy(), 
+        test_set['label'].to_numpy(), 
+        test_set['code'].to_numpy(), 
+        test_set['bbox'].to_numpy()) 
 
     num_classes = len(class_names)
 
@@ -131,7 +138,7 @@ if __name__ == '__main__':
         train_acc_ckp = checkpoint['train_acc']
         val_loss_ckp = checkpoint['val_loss']
         val_acc_ckp = checkpoint['val_acc']
-        best_acc_ckp = checkpoint['best_acc']
+        best_acc_ckp = checkpoint['test_acc']
         run_id = checkpoint['run_id']
         run_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{run_id}"
         logging.info(f'Loaded run {run_id} checkpoint')
@@ -167,7 +174,7 @@ if __name__ == '__main__':
 
     logging.info('Starting model evaluation')
 
-    train_loss, train_acc, val_loss, val_acc, best_acc, best_weights = evaluate(
+    train_loss, train_acc, val_loss, val_acc, test_acc, best_weights = evaluate(
         model=model, 
         num_epochs=num_epochs, 
         batch_size=batch_size,
@@ -176,6 +183,7 @@ if __name__ == '__main__':
         device=device, 
         train_dataset=train_dataset, 
         val_dataset=val_dataset, 
+        test_dataset=test_dataset,
         criterion=criterion, 
         early_stopper=early_stopper, 
         class_names=class_names,

@@ -1,8 +1,7 @@
 *.avi
 *.jpg
-*.png
+/data/kvasir-instrument/masks/masks/*.png
 /kvasir_vqa
-/model/feature_extractor/runs/*
 *.pt
 testarg.py
 

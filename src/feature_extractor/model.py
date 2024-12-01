@@ -14,7 +14,6 @@ from dotenv import load_dotenv
 from torcheval.metrics.functional import multiclass_accuracy
 from common.util import label2id_list
 from feature_extractor.data import get_class_names
-from torchvision.models import ViT_B_16_Weights 
 
 load_dotenv()  
 
@@ -29,7 +28,7 @@ def get_model(model_name='resnet152', num_classes=0, freeze='2'):
     ----------
     Parameters
         model_name: str
-            Accepted model names are: resnet (50, 101 and 152) and vgg(16)
+            Accepted model names are: resnet (50, 101 and 152), vgg16 and vitb16
         num_classes: int
             number of output classes
         freeze: str
