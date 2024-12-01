@@ -233,8 +233,7 @@ def id2label(idx : int, classes: list) -> str:
     ------
     '''
     
-    label = classes.keys()[classes.values().index(idx)]
-    return label  
+    return classes[idx] 
 
 
 

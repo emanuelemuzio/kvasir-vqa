@@ -129,7 +129,6 @@ def evaluate(model,
             train_acc_ckp = [],
             val_loss_ckp = [],
             val_acc_ckp = [],
-            best_acc_ckp = - np.inf,
             start_epoch = 1,
             run_id='test'):
     
@@ -195,7 +194,6 @@ def evaluate(model,
 
     train_acc = []
     val_acc = []
-    best_acc = - np.inf
     best_weights = None
 
     if train_loss_ckp is not None:
@@ -204,7 +202,6 @@ def evaluate(model,
         train_acc += train_acc_ckp
         val_loss += val_loss_ckp
         val_acc += val_acc_ckp
-        best_acc = best_acc_ckp
         early_stopper.min_validation_loss = min(val_loss)
 
     # Ciclo di addestramento
@@ -216,7 +213,7 @@ def evaluate(model,
         train_loss.append(epoch_train_loss)
         train_acc.append(epoch_train_acc)
         
-        epoch_val_loss, epoch_val_acc = val(model, val_dataloader, criterion, optimizer, class_names, device)
+        epoch_val_loss, epoch_val_acc = val(model, val_dataloader, criterion, class_names, device)
         val_loss.append(epoch_val_loss)
         val_acc.append(epoch_val_acc)
         
@@ -224,8 +221,7 @@ def evaluate(model,
 
         print(f"Epoch [{epoch}/{num_epochs}] Train Loss: {epoch_train_loss:.4f}  Validation Loss: {epoch_val_loss:.4f}, Validation Accuracy: {epoch_val_acc*100:.2f}%")
         
-        if epoch_val_acc > best_acc:
-            best_acc = epoch_val_acc
+        if epoch_val_loss < early_stopper.min_validation_loss:
             best_weights = model.state_dict()
 
             torch.save({
@@ -235,7 +231,6 @@ def evaluate(model,
                 'train_acc' : train_acc,
                 'val_loss' : val_loss,
                 'val_acc' : val_acc,
-                'best_acc' : best_acc,
                 'run_id' : run_id
             }, f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_CHECKPOINT')}") 
 
@@ -245,7 +240,7 @@ def evaluate(model,
             logger.info('Early stop activating')
             break
             
-    return train_loss, train_acc, val_loss, val_acc, best_acc, best_weights
+    return train_loss, train_acc, val_loss, val_acc, best_weights
  
  
 
@@ -315,7 +310,7 @@ def train(model, train_dataset, criterion, optimizer, class_names, device, sched
 
 
 
-def val(model, val_dataset, criterion, optimizer, class_names, device):
+def val(model, val_dataset, criterion, class_names, device):
     
     '''
     Validation step function
@@ -372,6 +367,28 @@ def val(model, val_dataset, criterion, optimizer, class_names, device):
         val_acc = val_acc / len(val_dataset)
         
         return val_loss, val_acc 
+
+
+
+def predict(model, device, dataset, class_names):
+    dataloader = DataLoader(dataset)
+    predictions = []
+    targets = []
+
+    with torch.no_grad():
+        for i, (img, label, _, _) in enumerate(dataloader):
+            torch.cuda.empty_cache()
+            
+            img = img.to(device)
+            label = (torch.tensor((label2id_list(label, class_names))))
+            
+            output = model(img)
+            output = output.squeeze(0).detach().cpu().tolist()
+            
+            predictions.append(output)
+            targets.append(label)
+
+    return predictions, targets
      
      
 

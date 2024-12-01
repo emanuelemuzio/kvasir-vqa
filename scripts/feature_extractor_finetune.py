@@ -10,11 +10,16 @@ import json
 import torch.optim as optim
 import logging
 import argparse
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 from dotenv import load_dotenv
+from sklearn.metrics import classification_report
 from common.earlystop import EarlyStopper
-from common.util import generate_run_id, ROOT, plot_run, init_logger, df_train_test_split
+from common.util import generate_run_id, ROOT, plot_run, init_logger, df_train_test_split, id2label
 from feature_extractor.data import _Dataset, prepare_data, get_class_names
-from feature_extractor.model import get_model, evaluate
+from feature_extractor.model import get_model, evaluate, predict
 from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR
 from torch import optim
 from torch.nn import CrossEntropyLoss
@@ -64,7 +69,7 @@ if __name__ == '__main__':
     class_names = get_class_names()
     
     train_set, val_set = df_train_test_split(dataset, 0.3) 
-    val_set, test_set = df_train_test_split(dataset, 0.66) 
+    val_set, test_set = df_train_test_split(dataset, 0.5) 
 
     logging.info('Building dataloaders...')
     
@@ -125,7 +130,6 @@ if __name__ == '__main__':
     train_acc_ckp = None
     val_loss_ckp = None
     val_acc_ckp = None
-    best_acc_ckp = None 
     start_epoch = 1
 
     run_path = None
@@ -138,7 +142,6 @@ if __name__ == '__main__':
         train_acc_ckp = checkpoint['train_acc']
         val_loss_ckp = checkpoint['val_loss']
         val_acc_ckp = checkpoint['val_acc']
-        best_acc_ckp = checkpoint['test_acc']
         run_id = checkpoint['run_id']
         run_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{run_id}"
         logging.info(f'Loaded run {run_id} checkpoint')
@@ -174,7 +177,7 @@ if __name__ == '__main__':
 
     logging.info('Starting model evaluation')
 
-    train_loss, train_acc, val_loss, val_acc, test_acc, best_weights = evaluate(
+    train_loss, train_acc, val_loss, val_acc, best_weights = evaluate(
         model=model, 
         num_epochs=num_epochs, 
         batch_size=batch_size,
@@ -183,7 +186,6 @@ if __name__ == '__main__':
         device=device, 
         train_dataset=train_dataset, 
         val_dataset=val_dataset, 
-        test_dataset=test_dataset,
         criterion=criterion, 
         early_stopper=early_stopper, 
         class_names=class_names,
@@ -191,13 +193,40 @@ if __name__ == '__main__':
         train_acc_ckp = train_acc_ckp,
         val_loss_ckp = val_loss_ckp,
         val_acc_ckp = val_acc_ckp,
-        best_acc_ckp = best_acc_ckp,
         start_epoch = start_epoch,
         run_id=run_id)
     
     logging.info(f'Evaluation ended in {len(train_loss)} epochs')
     
     torch.save(best_weights, f"{run_path}/model.pt")
+    
+    logging.info(f'Starting test phase')
+    
+    model.load_state_dict(best_weights)
+
+    predictions, target = predict(
+        model=model, 
+        device=device, 
+        dataset=test_dataset,
+        class_names=class_names 
+    )
+    
+    test_acc = None
+    
+    y_true = []
+    y_pred = []
+    
+    for pred, t in zip(predictions, target):
+        y_pred.append(int(np.argmax(pred)))
+        y_true.append(t.item())
+        
+    fig, ax = plt.subplots(nrows=1, ncols=1)
+        
+    cr = classification_report(y_true=y_true, y_pred=y_pred, target_names=class_names, output_dict=True)
+    
+    sns.heatmap(pd.DataFrame(cr).iloc[:-1, :].T, annot=True, ax=ax).get_figure()
+    
+    fig.savefig(f"{run_path}/cr.png")
 
     with open(f"{run_path}/run.json", "w") as f:
         config = vars(args)
@@ -205,7 +234,6 @@ if __name__ == '__main__':
         config['val_loss'] = val_loss
         config['train_acc'] = train_acc
         config['val_acc'] = val_acc
-        config['best_acc'] = best_acc
         config['run_id'] = run_id
         json.dump(config, f)
 

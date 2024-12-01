@@ -22,8 +22,8 @@
                 "--mode=min",
                 "--weight_decay=0.01",
                 "--model=resnet50",
-                "--freeze=2",
-                "--aug=0"
+                "--freeze=1",
+                "--aug=1"
             ]
         },
         {
