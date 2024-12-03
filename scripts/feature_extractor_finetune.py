@@ -8,7 +8,6 @@ import os
 import torch
 import json
 import torch.optim as optim
-import logging
 import argparse
 import numpy as np
 import pandas as pd
@@ -17,14 +16,13 @@ import matplotlib.pyplot as plt
 from dotenv import load_dotenv
 from sklearn.metrics import classification_report
 from common.earlystop import EarlyStopper
-from common.util import generate_run_id, ROOT, plot_run, init_logger, df_train_test_split, id2label
+from common.util import generate_run_id, ROOT, plot_run, logger, df_train_test_split
 from feature_extractor.data import _Dataset, prepare_data, get_class_names
 from feature_extractor.model import get_model, evaluate, predict
 from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR
 from torch import optim
 from torch.nn import CrossEntropyLoss
 
-init_logger(logging)
 load_dotenv()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -57,7 +55,7 @@ if __name__ == '__main__':
 
     model_name = args.model or 'resnet152'
 
-    logging.info('Generating run id')
+    logger.info('Generating run id')
     run_id = generate_run_id()
     
     use_aug = args.aug == '1'
@@ -71,7 +69,7 @@ if __name__ == '__main__':
     train_set, val_set = df_train_test_split(dataset, 0.3) 
     val_set, test_set = df_train_test_split(dataset, 0.5) 
 
-    logging.info('Building dataloaders...')
+    logger.info('Building dataloaders...')
     
     train_dataset = _Dataset(
         train_set['path'].to_numpy(), 
@@ -93,14 +91,14 @@ if __name__ == '__main__':
 
     num_classes = len(class_names)
 
-    logging.info('Recovering base model...')
+    logger.info('Recovering base model...')
 
     model = get_model(model_name=model_name, num_classes=num_classes, freeze=freeze).to(device)
 
     if device == 'cuda':
         torch.compile(model, 'max-autotune')
 
-    logging.info('Declaring hyper parameters')
+    logger.info('Declaring hyper parameters')
     
     # Train run hyper parameters
 
@@ -144,9 +142,9 @@ if __name__ == '__main__':
         val_acc_ckp = checkpoint['val_acc']
         run_id = checkpoint['run_id']
         run_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{run_id}"
-        logging.info(f'Loaded run {run_id} checkpoint')
+        logger.info(f'Loaded run {run_id} checkpoint')
     else:
-        logging.info(f'New run: {run_id}')
+        logger.info(f'New run: {run_id}')
         run_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{run_id}"
         os.mkdir(run_path)
         
@@ -175,7 +173,7 @@ if __name__ == '__main__':
         elif args.scheduler == 'linear':
             scheduler.append(LinearLR(optimizer=optimizer))
 
-    logging.info('Starting model evaluation')
+    logger.info('Starting model evaluation')
 
     train_loss, train_acc, val_loss, val_acc, best_weights = evaluate(
         model=model, 
@@ -196,11 +194,11 @@ if __name__ == '__main__':
         start_epoch = start_epoch,
         run_id=run_id)
     
-    logging.info(f'Evaluation ended in {len(train_loss)} epochs')
+    logger.info(f'Evaluation ended in {len(train_loss)} epochs')
     
     torch.save(best_weights, f"{run_path}/model.pt")
     
-    logging.info(f'Starting test phase')
+    logger.info(f'Starting test phase')
     
     model.load_state_dict(best_weights)
 
@@ -224,9 +222,15 @@ if __name__ == '__main__':
         
     cr = classification_report(y_true=y_true, y_pred=y_pred, target_names=class_names, output_dict=True)
     
-    sns.heatmap(pd.DataFrame(cr).iloc[:-1, :].T, annot=True, ax=ax).get_figure()
+    cr = pd.DataFrame(cr).iloc[:-1, :].T
+    
+    cr.to_csv(f"{run_path}/cr.csv")
+    
+    sns.heatmap(cr, annot=True, ax=ax).get_figure()
     
     fig.savefig(f"{run_path}/cr.png")
+    
+    plt.close()
 
     with open(f"{run_path}/run.json", "w") as f:
         config = vars(args)

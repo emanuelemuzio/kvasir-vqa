@@ -14,6 +14,12 @@ load_dotenv()
 
 ROOT = os.getcwd() 
 
+random_seed = 42
+
+np.random.seed(random_seed)
+random.seed(random_seed)
+torch.manual_seed(random_seed)
+
 
 
 def init_logger(logging):
@@ -203,13 +209,7 @@ def plot_run(base_path : str, run_id : str) -> None:
 
             plt.savefig(f"{base_path}/{run_id}/run.png")
             
-random_seed = 42
 
-np.random.seed(random_seed)
-random.seed(random_seed)
-torch.manual_seed(random_seed)
-
-load_dotenv() 
  
  
  

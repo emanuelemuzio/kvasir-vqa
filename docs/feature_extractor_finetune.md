@@ -24,7 +24,7 @@ Il focus di questo documento è tuttavia il processo di addestramento per l'estr
 - **Librerie/framework utilizzati:** Il processo di addestramento è stato realizzato utilizzando PyTorch
 - **Hyperparametri principali:**
   - **Batch size:** 32;
-  - **Numero di epoche:** 100 (massimo);
+  - **Numero di epoche:** 200 (massimo);
   - **Learning rate:** 5e-4
   - **Ottimizzatore:** SGD
   - **Funzione di perdita:** Cross Entropy Loss 
@@ -48,101 +48,85 @@ I risultati dell'addestramento saranno differenziati, indicando se tra i dati ut
 
 ### 3.1.1 Data Augmentation - Freeze = 1
 
-**Run ID**: 30112024170627
+**Run ID**: 01122024214140
 
-**Best Accuracy**: 82%
-
-**Validation Loss**: 0.5137511061083886
+**Test Accuracy**: 86%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/30112024170627/run.png)
+![](../models/feature_extractor/runs/01122024214140/run.png)
 
 ### 3.1.2 No Data Augmentation - Freeze = 1
 
-**Run ID**: 30112024194030
+**Run ID**: 01122024232448
 
-**Best Accuracy**: 84%
-
-**Validation Loss**: 0.8684678720867532
+**Test Accuracy**: 83%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/30112024194030/run.png)
+![](../models/feature_extractor/runs/01122024232448/run.png)
 
 ### 3.1.3 Data Augmentation - Freeze = 2
 
-**Run ID**: 30112024220735
+**Run ID**: 02122024021619
 
-**Best Accuracy**: 82%
-
-**Validation Loss**: 0.5196142233667835
+**Test Accuracy**: 93%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/30112024220735/run.png)
+![](../models/feature_extractor/runs/02122024021619/run.png)
 
 ### 3.1.4 No Data Augmentation - Freeze = 2
 
-**Run ID**:
+**Run ID**: 02122024003640
 
-**Best Accuracy**:
-
-**Validation Loss**:
+**Test Accuracy**: 88%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/*/run.png)
+![](../models/feature_extractor/runs/02122024003640/run.png)
 
 ### 3.2 ResNet101
 
 ### 3.2.1 Data Augmentation - Freeze = 1
 
-**Run ID**: 30112024144542
+**Run ID**: 02122024165018
 
-**Best Accuracy**: 83%
-
-**Validation Loss**: 0.525684341980565
+**Test Accuracy**: 90%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/30112024144542/run.png)
+![](../models/feature_extractor/runs/02122024165018/run.png)
 
 ### 3.2.2 No Data Augmentation - Freeze = 1
 
-**Run ID**:
+**Run ID**: 02122024092202
 
-**Best Accuracy**:
-
-**Validation Loss**:
+**Test Accuracy**: 77%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/*/run.png)
+![](../models/feature_extractor/runs/02122024092202/run.png)
 
 ### 3.2.3 Data Augmentation - Freeze = 2
 
-**Run ID**:
+**Run ID**: 02122024115518
 
-**Best Accuracy**:
-
-**Validation Loss**:
+**Test Accuracy**: 92%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/*/run.png)
+![](../models/feature_extractor/runs/02122024115518/run.png)
 
 ### 3.2.4 No Data Augmentation - Freeze = 2
 
-**Run ID**:
+**Run ID**: 02122024105552
 
-**Best Accuracy**:
-
-**Validation Loss**:
+**Test Accuracy**: 81%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/*/run.png)
+![](../models/feature_extractor/runs/02122024105552/run.png)
 
 ### 3.3 ResNet152
 
@@ -150,9 +134,7 @@ I risultati dell'addestramento saranno differenziati, indicando se tra i dati ut
 
 **Run ID**:
 
-**Best Accuracy**:
-
-**Validation Loss**:
+**Test Accuracy**:
 
 **Grafico dell'addestramento**:
 
@@ -160,23 +142,19 @@ I risultati dell'addestramento saranno differenziati, indicando se tra i dati ut
 
 ### 3.3.2 No Data Augmentation - Freeze = 1
 
-**Run ID**:
+**Run ID**: 02122024213427
 
-**Best Accuracy**:
-
-**Validation Loss**:
+**Test Accuracy**: 88%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/*/run.png)
+![](../models/feature_extractor/runs/02122024213427/run.png)
 
 ### 3.3.3 Data Augmentation - Freeze = 2
 
 - **Run ID**: 05112024120001
 
-- **Best Accuracy**: 85%
-
-- **Validation Loss**: 0.5441330722891368
+- **Test Accuracy**: 85%
 
 - **Grafico dell'addestramento**: 
 
@@ -186,9 +164,7 @@ I risultati dell'addestramento saranno differenziati, indicando se tra i dati ut
 
 **Run ID**:
 
-**Best Accuracy**:
-
-**Validation Loss**:
+**Test Accuracy**:
 
 **Grafico dell'addestramento**:
 
@@ -200,9 +176,7 @@ I risultati dell'addestramento saranno differenziati, indicando se tra i dati ut
 
 **Run ID**:
 
-**Best Accuracy**:
-
-**Validation Loss**:
+**Test Accuracy**:
 
 **Grafico dell'addestramento**:
 
@@ -212,9 +186,7 @@ I risultati dell'addestramento saranno differenziati, indicando se tra i dati ut
 
 **Run ID**:
 
-**Best Accuracy**:
-
-**Validation Loss**:
+**Test Accuracy**:
 
 **Grafico dell'addestramento**:
 
@@ -224,9 +196,7 @@ I risultati dell'addestramento saranno differenziati, indicando se tra i dati ut
 
 **Run ID**:
 
-**Best Accuracy**:
-
-**Validation Loss**:
+**Test Accuracy**:
 
 **Grafico dell'addestramento**:
 
@@ -236,9 +206,7 @@ I risultati dell'addestramento saranno differenziati, indicando se tra i dati ut
 
 **Run ID**:
 
-**Best Accuracy**:
-
-**Validation Loss**:
+**Test Accuracy**:
 
 **Grafico dell'addestramento**:
 
@@ -250,9 +218,7 @@ I risultati dell'addestramento saranno differenziati, indicando se tra i dati ut
 
 **Run ID**:
 
-**Best Accuracy**:
-
-**Validation Loss**:
+**Test Accuracy**:
 
 **Grafico dell'addestramento**:
 
@@ -262,9 +228,7 @@ I risultati dell'addestramento saranno differenziati, indicando se tra i dati ut
 
 **Run ID**:
 
-**Best Accuracy**:
-
-**Validation Loss**:
+**Test Accuracy**:
 
 **Grafico dell'addestramento**:
 
@@ -274,9 +238,7 @@ I risultati dell'addestramento saranno differenziati, indicando se tra i dati ut
 
 **Run ID**: 08112024021141
 
-**Best Accuracy**: 77%
-
-**Validation Loss**: 0.6361981792232165
+**Test Accuracy**: 77%
 
 **Grafico dell'addestramento**:
 
@@ -286,9 +248,7 @@ I risultati dell'addestramento saranno differenziati, indicando se tra i dati ut
 
 **Run ID**:
 
-**Best Accuracy**:
-
-**Validation Loss**:
+**Test Accuracy**:
 
 **Grafico dell'addestramento**:
 
