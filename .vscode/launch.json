@@ -23,7 +23,7 @@
                 "--weight_decay=0.01",
                 "--model=vgg16",
                 "--freeze=1",
-                "--aug=1"
+                "--aug=0"
             ]
         },
         {
