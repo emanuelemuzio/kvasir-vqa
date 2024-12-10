@@ -14,11 +14,11 @@ load_dotenv()
 
 ROOT = os.getcwd() 
 
-random_seed = 42
+RANDOM_SEED = int(os.getenv('RANDOM_SEED'))
 
-np.random.seed(random_seed)
-random.seed(random_seed)
-torch.manual_seed(random_seed)
+np.random.seed(RANDOM_SEED)
+random.seed(RANDOM_SEED)
+torch.manual_seed(RANDOM_SEED)
 
 
 
@@ -317,37 +317,6 @@ def label2id_list(label_list : list, classes : list) -> list:
 
     return output
  
- 
-
-def df_train_test_split(df : pd.DataFrame, test_size=0.2) -> pd.DataFrame:
-    
-    '''
-    Utility function for splitting a Dataframe in two sets, 
-    by simply taking a user defined % of the dataset.
-    
-    ----------
-    Parameters
-        df: DataFrame
-            Dataframe to split
-        test_size: float
-            % to use for test split
-    ----------
-
-    ------
-    Return
-        train_set: Dataframe
-            Train split from original dataframe
-        test_set: Dataframe
-            Test split from original dataframe
-    ------
-    '''
-    
-    msk = np.random.rand(len(df)) < test_size
-    train_set = df[~msk]
-    test_set = df[msk]
-
-    return train_set, test_set
-
 
 
 def image_transform() -> v2.Compose:

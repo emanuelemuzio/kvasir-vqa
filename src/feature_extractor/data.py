@@ -17,11 +17,11 @@ from PIL import Image
 import torch
 from common.util import logger, ROOT, image_transform
 
-random_seed = 42
+RANDOM_SEED = int(os.getenv('RANDOM_SEED'))
 
-np.random.seed(random_seed)
-random.seed(random_seed)
-torch.manual_seed(random_seed)
+np.random.seed(RANDOM_SEED)
+random.seed(RANDOM_SEED)
+torch.manual_seed(RANDOM_SEED)
 
 load_dotenv() 
 

@@ -7,6 +7,7 @@ warnings.filterwarnings('ignore')
 import torch
 from feature_extractor.model import launch_experiment
 import argparse
+import os
 
 configs = {
     "model" : [
@@ -62,4 +63,9 @@ if __name__ == '__main__':
                     args.aug = aug
                     launch_experiment(args=args, device=device)
     else:
-        launch_experiment(args, device)    
+        launch_experiment(args, device)  
+        
+    turnoff = int(args.turnoff)
+        
+    if turnoff >= 0:
+        os.system(f"shutdown /s /t {turnoff}") 

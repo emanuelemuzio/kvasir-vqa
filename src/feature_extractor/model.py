@@ -21,14 +21,15 @@ from feature_extractor.data import get_class_names
 from dotenv import load_dotenv
 from sklearn.metrics import classification_report
 from common.earlystop import EarlyStopper
-from common.util import generate_run_id, ROOT, plot_run, logger, df_train_test_split
+from common.util import generate_run_id, ROOT, plot_run, logger
 from feature_extractor.data import _Dataset, prepare_data, get_class_names
 from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR
 from torch import optim
 from torch.nn import CrossEntropyLoss
+from sklearn.model_selection import train_test_split
 
 load_dotenv()  
-
+RANDOM_SEED = int(os.getenv('RANDOM_SEED'))
 
 
 def get_model(model_name='resnet152', num_classes=0, freeze='2'):
@@ -448,8 +449,6 @@ def init(model_name='resnet152', weights_path=os.getenv('FEATURE_EXTRACTOR_MODEL
 
 def launch_experiment(args : argparse.Namespace, device : str):
     
-    turnoff = int(args.turnoff)
-
     freeze = args.freeze or '2'
 
     model_name = args.model or 'resnet152'
@@ -461,32 +460,49 @@ def launch_experiment(args : argparse.Namespace, device : str):
     
     csv_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_CSV_AUG')}" if use_aug else f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_CSV')}"
     
-    dataset = prepare_data(csv_path, aug=use_aug)    
-
     class_names = get_class_names()
     
-    train_set, val_set = df_train_test_split(dataset, 0.6) 
-    val_set, test_set = df_train_test_split(val_set, 0.5) 
+    dataset = prepare_data(csv_path, aug=use_aug)  
+    
+    y_column = 'label'
+    x_columns = dataset.columns.to_list()
+    x_columns.remove(y_column)
+    
+    X = dataset.drop(y_column, axis=1)
+    Y = dataset.drop(x_columns, axis=1)
+
+    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.3, stratify=Y, random_state=RANDOM_SEED) 
+    X_test, X_val, Y_test, Y_val = train_test_split(X_test, Y_test, test_size=0.5, stratify=Y_test, random_state=RANDOM_SEED) 
+    
+    X_train = X_train.reset_index()
+    Y_train = Y_train.reset_index()
+    X_test = X_test.reset_index()
+    Y_test = Y_test.reset_index()
+    X_val = X_val.reset_index()
+    Y_val = Y_val.reset_index()
 
     logger.info('Building dataloaders...')
     
     train_dataset = _Dataset(
-        train_set['path'].to_numpy(), 
-        train_set['label'].to_numpy(), 
-        train_set['code'].to_numpy(), 
-        train_set['bbox'].to_numpy())
+        X_train['path'], 
+        Y_train['label'], 
+        X_train['code'], 
+        X_train['bbox']
+    )
     
     val_dataset = _Dataset(
-        val_set['path'].to_numpy(), 
-        val_set['label'].to_numpy(), 
-        val_set['code'].to_numpy(), 
-        val_set['bbox'].to_numpy()) 
+        X_test['path'], 
+        Y_test['label'], 
+        X_test['code'], 
+        X_test['bbox']
+    ) 
     
     test_dataset = _Dataset(
-        test_set['path'].to_numpy(), 
-        test_set['label'].to_numpy(), 
-        test_set['code'].to_numpy(), 
-        test_set['bbox'].to_numpy()) 
+        X_val['path'], 
+        Y_val['label'], 
+        X_val['code'], 
+        X_val['bbox']
+    ) 
 
     num_classes = len(class_names)
 
@@ -621,6 +637,8 @@ def launch_experiment(args : argparse.Namespace, device : str):
         
     cr = classification_report(y_true=y_true, y_pred=y_pred, target_names=class_names, output_dict=True)
     
+    test_acc = cr['weighted_avg']['f1-score']
+    
     cr = pd.DataFrame(cr).iloc[:-1, :].T
     
     cr.to_csv(f"{run_path}/cr.csv")
@@ -638,13 +656,9 @@ def launch_experiment(args : argparse.Namespace, device : str):
         config['train_acc'] = train_acc
         config['val_acc'] = val_acc
         config['run_id'] = run_id
+        config['test_accuracy'] = test_acc
         json.dump(config, f)
 
     os.remove(f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_CHECKPOINT')}")
 
-    runs = os.listdir(f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}") 
-
     plot_run(base_path=f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}", run_id=run_id)
-
-    if turnoff >= 0:
-        os.system(f"shutdown /s /t {turnoff}")
