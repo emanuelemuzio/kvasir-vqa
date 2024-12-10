@@ -132,13 +132,13 @@ I risultati dell'addestramento saranno differenziati, indicando se tra i dati ut
 
 ### 3.3.1 Data Augmentation - Freeze = 1
 
-**Run ID**:
+**Run ID**: 03122024011023
 
-**Test Accuracy**:
+**Test Accuracy**: 93%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/*/run.png)
+![](../models/feature_extractor/runs/03122024011023/run.png)
 
 ### 3.3.2 No Data Augmentation - Freeze = 1
 
@@ -152,107 +152,107 @@ I risultati dell'addestramento saranno differenziati, indicando se tra i dati ut
 
 ### 3.3.3 Data Augmentation - Freeze = 2
 
-- **Run ID**: 05112024120001
+- **Run ID**: 03122024092613
 
-- **Test Accuracy**: 85%
+- **Test Accuracy**: 90%
 
 - **Grafico dell'addestramento**: 
 
-![](../models/feature_extractor/runs/05112024120001/run.png)
+![](../models/feature_extractor/runs/03122024092613/run.png)
 
 ### 3.3.4 No Data Augmentation - Freeze = 2
 
-**Run ID**:
+**Run ID**: 03122024150252
 
-**Test Accuracy**:
+**Test Accuracy**: 83%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/*/run.png)
+![](../models/feature_extractor/runs/03122024150252/run.png)
 
 ### 3.4 VGG16
 
 ### 3.4.1 Data Augmentation - Freeze = 1
 
-**Run ID**:
+**Run ID**: 03122024181801
 
-**Test Accuracy**:
+**Test Accuracy**: 94%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/*/run.png)
+![](../models/feature_extractor/runs/03122024181801/run.png)
 
 ### 3.4.2 No Data Augmentation - Freeze = 1
 
-**Run ID**:
+**Run ID**: 04122024154037
 
-**Test Accuracy**:
+**Test Accuracy**: 83%
 
-**Grafico dell'addestramento**:
+**Grafico dell'addestramento**: 
 
-![](../models/feature_extractor/runs/*/run.png)
+![](../models/feature_extractor/runs/04122024154037/run.png)
 
 ### 3.4.3 Data Augmentation - Freeze = 2
 
-**Run ID**:
+**Run ID**: 05122024001044
 
-**Test Accuracy**:
+**Test Accuracy**: 92%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/*/run.png)
+![](../models/feature_extractor/runs/05122024001044/run.png)
 
 ### 3.4.4 No Data Augmentation - Freeze = 2
 
-**Run ID**:
+**Run ID**: 05122024075652
 
-**Test Accuracy**:
+**Test Accuracy**: 92%
 
-**Grafico dell'addestramento**:
+**Grafico dell'addestramento**: 
 
-![](../models/feature_extractor/runs/*/run.png)
+![](../models/feature_extractor/runs/05122024075652/run.png)
 
 ### 3.5 ViT B 16
 
 ### 3.5.1 Data Augmentation - Freeze = 1
 
-**Run ID**:
+**Run ID**: 06122024073951
 
-**Test Accuracy**:
+**Test Accuracy**: 90%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/*/run.png)
+![](../models/feature_extractor/runs/06122024073951/run.png)
 
 ### 3.5.2 No Data Augmentation - Freeze = 1
 
-**Run ID**:
+**Run ID**: 06122024201722
 
-**Test Accuracy**:
+**Test Accuracy**: 80%
 
-**Grafico dell'addestramento**:
+**Grafico dell'addestramento**: 
 
-![](../models/feature_extractor/runs/*/run.png)
+![](../models/feature_extractor/runs/06122024201722/run.png)
 
 ### 3.5.3 Data Augmentation - Freeze = 2
 
-**Run ID**: 08112024021141
+**Run ID**: 07122024104631
 
-**Test Accuracy**: 77%
+**Test Accuracy**: 92%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/08112024021141/run.png)
+![](../models/feature_extractor/runs/07122024104631/run.png)
 
 ### 3.5.4 No Data Augmentation - Freeze = 2
 
-**Run ID**:
+**Run ID**: 07122024163323
 
-**Test Accuracy**:
+**Test Accuracy**: 93%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/*/run.png)
+![](../models/feature_extractor/runs/07122024163323/run.png)
 
 ---
    
