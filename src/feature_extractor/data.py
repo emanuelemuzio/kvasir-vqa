@@ -30,7 +30,8 @@ load_dotenv()
 class _Dataset(Dataset):
     
     '''
-    Feature extractor dataset.
+    PyTorch Dataset implementation for fine tuning the feature extractor block, used with
+    data from Hyper Kvasir and Kvasir Instrument
     
     Builder parameters
     ------------------
@@ -44,7 +45,7 @@ class _Dataset(Dataset):
             List of bounding boxes, where present (only polyp and instrument images) 
     ------------------
     
-    Return (once built)
+    Return (with each evaluation loops)
     ------
         transformed_image: tensor
             224x224 normalized image, ready for inference or training
@@ -131,12 +132,7 @@ def generate_classes_json(df : pd.DataFrame) -> None:
     ----------
         df: DataFrame
             DataFrame that contains metadata for model evaluation.
-    ----------
-    
-    Return
-    ------
-        None
-    ------
+    ---------- 
     '''
     
     class_names = df.label.unique()
@@ -320,7 +316,7 @@ def prepare_data(data_path:str, aug=False) -> pd.DataFrame:
 
     return df
  
- 
+
  
 def get_classes() -> dict:
  

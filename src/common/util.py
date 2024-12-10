@@ -3,7 +3,6 @@ import json
 import os
 import matplotlib.pyplot as plt
 import logging
-import pandas as pd
 import numpy as np
 import random
 from dotenv import load_dotenv

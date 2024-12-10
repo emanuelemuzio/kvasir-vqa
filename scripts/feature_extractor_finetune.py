@@ -9,6 +9,12 @@ from feature_extractor.model import launch_experiment
 import argparse
 import os
 
+'''
+The configs dict is going to be useful only if the 'run_all' argument is 1, either way
+it is pointless. It contains all the possible macro combinations of parameters.
+The rest of the hyperparams will be specified from the other arguments.
+'''
+
 configs = {
     "model" : [
         "resnet50",
@@ -32,20 +38,24 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     
+    '''
+    Brief description of the parameter, followed by the standard/expected value for the standard case.
+    '''
+    
     parser.add_argument('--run_all', help="1 if ALL configurations have to be tested")
-    parser.add_argument('--turnoff', help="x < 0 (es. -1) for no turnoff, 0 for instant turnoff, x > 0 to plan the turnoff in x seconds") 
-    parser.add_argument('--num_epochs', help="usually 50, 100, 200 epochs")
-    parser.add_argument('--batch_size', help="usually 16, 32 or 64")
-    parser.add_argument('--lr', help="usually 1e-3")
-    parser.add_argument('--momentum', help="mostly 0.9")
-    parser.add_argument('--T_max', help="usually 100")
-    parser.add_argument('--eta_min', help="usually 100")
-    parser.add_argument('--patience', help="usually 0.001")
-    parser.add_argument('--min_delta', help="depends on how sensitive you want the early stopper to be")
-    parser.add_argument('--mode', help="'min' for Adam optimizer")
-    parser.add_argument('--scheduler', help="'cosine', 'plateau' and 'linear'. write as a csv row for multiple schedulers")
+    parser.add_argument('--turnoff', help="x < 0 for no turn off, else turn off in x seconds") 
+    parser.add_argument('--num_epochs', help="Training epochs, 200")
+    parser.add_argument('--batch_size', help="Batch size, 32")
+    parser.add_argument('--lr', help="Learning rate, 0.0005")
+    parser.add_argument('--momentum', help="Momentum for SGD, 0.9")
+    parser.add_argument('--T_max', help="CosineAnnealingLR, 100")
+    parser.add_argument('--eta_min', help="CosineAnnealingLR, 0.001")
+    parser.add_argument('--patience', help="Early Stopper patience, 8")
+    parser.add_argument('--min_delta', help="Early Stopper sensitivity, 0.005")
+    parser.add_argument('--mode', help="Adam optimizer mode, 'min'")
+    parser.add_argument('--scheduler', help="'cosine', 'plateau' and 'linear'. write as a csv row for multiple schedulers, 'cosine,plateau,linear'")
     parser.add_argument('--optimizer', help="'sgd', 'adam' or 'adamw")
-    parser.add_argument('--weight_decay', help="")
+    parser.add_argument('--weight_decay', help="Weight decay parameter, 0.0001")
     parser.add_argument('--model', help="'resnet50', 'resnet101', 'resnet152', 'vgg16' or 'vitb16")
     parser.add_argument('--freeze', help="'0' for inference, '1' for training only the top layer or '2' for training the entire model")
     parser.add_argument('--aug', help="'1' for augmented dataset, else '0'")

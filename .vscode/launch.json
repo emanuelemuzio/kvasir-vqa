@@ -15,7 +15,7 @@
                 "--momentum=0.9",
                 "--T_max=100",
                 "--eta_min=0.001",
-                "--patience=5",
+                "--patience=8",
                 "--min_delta=0.005",
                 "--scheduler=plateau,cosine",
                 "--optimizer=sgd",

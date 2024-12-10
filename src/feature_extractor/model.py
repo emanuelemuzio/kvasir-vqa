@@ -32,7 +32,8 @@ load_dotenv()
 RANDOM_SEED = int(os.getenv('RANDOM_SEED'))
 
 
-def get_model(model_name='resnet152', num_classes=0, freeze='2'):
+
+def get_model(model_name='vitb16', num_classes=0, freeze='2'):
     
     '''
     Function for retrieving the base model for either inference or training.
@@ -447,7 +448,21 @@ def init(model_name='resnet152', weights_path=os.getenv('FEATURE_EXTRACTOR_MODEL
 
     return feature_extractor
 
-def launch_experiment(args : argparse.Namespace, device : str):
+
+
+def launch_experiment(args : argparse.Namespace, device : str) -> None:
+    
+    '''
+    Function for launching a single experiment (used in the scripts/feature_extractor_finetune.py)
+    
+    ----------
+    Parameters
+        args: argparse.Namespace
+            args object created from argparser
+        device: str
+            'cuda' or 'cpu'
+    ---------- 
+    '''
     
     freeze = args.freeze or '2'
 
@@ -521,9 +536,9 @@ def launch_experiment(args : argparse.Namespace, device : str):
 
     # Training loop
 
-    num_epochs = int(args.num_epochs) or 100
+    num_epochs = int(args.num_epochs) or 200
     batch_size = int(args.batch_size) or 32
-    lr = float(args.lr) or 0.01
+    lr = float(args.lr) or 0.0005
     momentum = float(args.momentum) or 0.9
     weight_decay = float(args.weight_decay) or 1e-4
     
@@ -536,8 +551,8 @@ def launch_experiment(args : argparse.Namespace, device : str):
 
     mode = args.mode or 'min'
 
-    patience = int(args.patience) or 5
-    min_delta = float(args.min_delta) or 0.01
+    patience = int(args.patience) or 8
+    min_delta = float(args.min_delta) or 0.005
 
     train_loss_ckp = None
     train_acc_ckp = None
@@ -637,7 +652,7 @@ def launch_experiment(args : argparse.Namespace, device : str):
         
     cr = classification_report(y_true=y_true, y_pred=y_pred, target_names=class_names, output_dict=True)
     
-    test_acc = cr['weighted_avg']['f1-score']
+    test_acc = cr['weighted avg']['f1-score']
     
     cr = pd.DataFrame(cr).iloc[:-1, :].T
     
