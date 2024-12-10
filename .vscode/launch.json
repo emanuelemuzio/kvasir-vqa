@@ -21,9 +21,10 @@
                 "--optimizer=sgd",
                 "--mode=min",
                 "--weight_decay=0.01",
-                "--model=vitb16",
-                "--freeze=2",
-                "--aug=0"
+                "--model=resnet50",
+                "--freeze=1",
+                "--aug=1",
+                "--run_all=1"
             ]
         },
         {
