@@ -67,7 +67,7 @@ if __name__ == '__main__':
     
     df.dropna(axis=0, inplace=True)
     
-    train_set, val_set = df_train_test_split(df, 0.4) 
+    train_set, val_set = df_train_test_split(df, 0.6) 
     val_set, test_set = df_train_test_split(df, 0.5) 
 
     logger.info('Building dataloaders...')

@@ -66,8 +66,8 @@ if __name__ == '__main__':
 
     class_names = get_class_names()
     
-    train_set, val_set = df_train_test_split(dataset, 0.3) 
-    val_set, test_set = df_train_test_split(dataset, 0.5) 
+    train_set, val_set = df_train_test_split(dataset, 0.6) 
+    val_set, test_set = df_train_test_split(val_set, 0.5) 
 
     logger.info('Building dataloaders...')
     

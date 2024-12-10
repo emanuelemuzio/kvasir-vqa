@@ -47,7 +47,7 @@
                 "--optimizer=sgd",
                 "--mode=min",
                 "--weight_decay=0.01",
-                "--feature_extractor=08112024021141",
+                "--feature_extractor=07122024163323",
                 "--prompting=1"
             ]
         }
