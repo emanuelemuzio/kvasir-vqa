@@ -191,8 +191,6 @@ def evaluate(model,
             validation loss history
         val_acc:
             validation accuracy history
-        best_acc:
-            best accuracy achieved
         best_weights:
             dict state of best epoch
     ------

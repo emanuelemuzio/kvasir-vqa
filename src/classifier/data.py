@@ -95,18 +95,21 @@ class Dataset_(Dataset):
     ------
     '''
     
-    def __init__(self, source=[], question=[], answer=[], img_id=[],  base_path='', prompt=[]):  
+    def __init__(self, source=[], question=[], answer=[], img_id=[],  base_path=''):  
         
         self.source = source
         self.question = question
         self.answer = answer
         self.img_id = img_id
         self.base_path = base_path
-        self.prompt = prompt
+        self.prompt = []
         self.transform = image_transform()
         self.use_prompt = len(self.prompt) > 0
         
         logger.info('Initialized Kvasir VQA Dataset')
+        
+    def add_prompts(self, prompt=[]):
+        self.prompt = prompt
     
     def __len__(self):
         return len(self.source)

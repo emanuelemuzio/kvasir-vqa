@@ -2,7 +2,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Fine tune feature extractor",
+            "name": "Feature Extractor Train",
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
@@ -37,7 +37,7 @@
             "args": [
                 "--architecture=hadamard",
                 "--turnoff=1",
-                "--num_epochs=50",
+                "--num_epochs=1",
                 "--batch_size=16",
                 "--lr=0.01",
                 "--momentum=0.9",
@@ -49,8 +49,8 @@
                 "--optimizer=sgd",
                 "--mode=min",
                 "--weight_decay=0.01",
-                "--feature_extractor=07122024163323",
-                "--prompting=1"
+                "--feature_extractor=13122024010744",
+                "--prompting=0"
             ]
         }
     ]

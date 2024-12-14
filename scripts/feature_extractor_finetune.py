@@ -96,7 +96,7 @@ if __name__ == '__main__':
                         launch_experiment(args=args, device=device)
                         
     else:
-        launch_experiment(args, device)  
+        launch_experiment(args=args, device=device)  
         
     turnoff = int(args.turnoff)
         
