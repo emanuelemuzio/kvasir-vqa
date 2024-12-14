@@ -208,8 +208,8 @@ def plot_run(base_path : str, run_id : str) -> None:
 
             plt.savefig(f"{base_path}/{run_id}/run.png")
             
-
- 
+            plt.close()
+            
  
  
 def id2label(idx : int, classes: list) -> str:

@@ -5,9 +5,10 @@ import warnings
 warnings.filterwarnings('ignore')
 
 import torch
-from feature_extractor.model import launch_experiment
 import argparse
 import os
+from feature_extractor.model import launch_experiment, ROOT
+from common.util import get_run_info
 
 '''
 The configs dict is going to be useful only if the 'run_all' argument is 1, either way
@@ -42,7 +43,6 @@ if __name__ == '__main__':
     Brief description of the parameter, followed by the standard/expected value for the standard case.
     '''
     
-    parser.add_argument('--run_all', help="1 if ALL configurations have to be tested")
     parser.add_argument('--turnoff', help="x < 0 for no turn off, else turn off in x seconds") 
     parser.add_argument('--num_epochs', help="Training epochs, 200")
     parser.add_argument('--batch_size', help="Batch size, 32")
@@ -59,19 +59,42 @@ if __name__ == '__main__':
     parser.add_argument('--model', help="'resnet50', 'resnet101', 'resnet152', 'vgg16' or 'vitb16")
     parser.add_argument('--freeze', help="'0' for inference, '1' for training only the top layer or '2' for training the entire model")
     parser.add_argument('--aug', help="'1' for augmented dataset, else '0'")
+    parser.add_argument('--run_all', help="1 if ALL configurations have to be tested")
+    parser.add_argument('--delete_ckp', help="If equals '1', the existing checkpoint will be deleted")
 
     args = parser.parse_args() 
     
     run_all = args.run_all == "1"
     
+    delete_ckp = args.delete_ckp == "1"
+    
+    if delete_ckp:
+        if os.path.exists(os.getenv('FEATURE_EXTRACTOR_CHECKPOINT')):
+            os.remove(os.getenv('FEATURE_EXTRACTOR_CHECKPOINT'))
+    
+    
     if run_all:
+    
+        skip_configs = []
+        
+        for run_id in os.listdir(f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}"):
+            run_json_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{run_id}/run.json"
+            if os.path.exists(run_json_path):
+                run_info = get_run_info(run_json_path)
+                
+                skip_configs.append((run_info['model'], run_info['freeze'], run_info['aug']))
+                
         for model in configs['model']:
             for freeze in configs['freeze']:
                 for aug in configs['aug']:
+                                        
                     args.model = model
                     args.freeze = freeze
                     args.aug = aug
-                    launch_experiment(args=args, device=device)
+                    
+                    if not (model, freeze, aug) in skip_configs:                    
+                        launch_experiment(args=args, device=device)
+                        
     else:
         launch_experiment(args, device)  
         

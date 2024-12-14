@@ -24,7 +24,8 @@
                 "--model=resnet50",
                 "--freeze=1",
                 "--aug=1",
-                "--run_all=1"
+                "--run_all=1",
+                "--delete_ckp=0"
             ]
         },
         {
