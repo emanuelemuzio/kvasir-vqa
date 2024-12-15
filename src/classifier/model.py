@@ -719,7 +719,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         
     cr = classification_report(y_true=y_true, y_pred=y_pred, target_names=answers, output_dict=True)
     
-    test_acc = cr['weighted avg']['f1-score']
+    test_acc = cr['macro avg']['f1-score']
     
     cr = pd.DataFrame(cr).iloc[:-1, :].T
     

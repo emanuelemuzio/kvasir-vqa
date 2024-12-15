@@ -40,240 +40,265 @@ Il focus di questo documento è tuttavia il processo di addestramento per l'estr
 
 ## 3. Risultati dell'Addestramento
 
-A seguire sarà presente la sequenza di risultati e andamenti delle varie iterazioni di addestramento principali, ovvero quello che hanno mantenuto una combinazione di accuracy e loss migliori.
-La metrica utilizzata è l'accuracy score, che rappresenta la frequenza con cui l'input corrisponde al target.
-I risultati dell'addestramento saranno differenziati, indicando se tra i dati utilizzati sono presenti immagini che sono state generate tramite Data Augmentation e se è stato riaddestrato l'intero modello tra quelli utilizzati o soltanto l'ultimo layer.
+A seguire, elenchiamo per ogni architettura la configurazione che ha prodotto il risultato migliore che verrà utilizzato per il modello finale.
+La metrica utilizzata è il **Macro F1-score** calcola la media dell'F1-score su tutte le classi, trattandole equamente, indipendentemente dalla loro frequenza nel dataset.
+Questa metrica è particolarmente indicata per valutare l'impatto della **data augmentation** sulle classi meno rappresentate, evitando che le classi maggioritarie influenzino eccessivamente il risultato, garantisce una valutazione bilanciata delle prestazioni del modello, riflettendo i miglioramenti nelle classi sottorappresentate.
+
+### Formula
+Macro F1 = (F1_class1 + F1_class2 + ... + F1_classN) / N
+
+
+Dove:
+- `N` è il numero totale di classi.
+- `F1_classX` è l'F1-score calcolato per la classe `X`.
+
+Questa scelta consente un'analisi più equa e dettagliata delle prestazioni del modello nei casi di dataset riequilibrati tramite data augmentation.
 
 ### 3.1 ResNet50
 
 ### 3.1.1 Data Augmentation - Freeze = 1
 
-**Run ID**: 01122024214140
+**Run ID**: 11122024151717
 
-**Test Accuracy**: 86%
+**Test Accuracy**: 78%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/01122024214140/run.png)
+![](../models/feature_extractor/runs/11122024151717/run.png)
 
 ### 3.1.2 No Data Augmentation - Freeze = 1
 
-**Run ID**: 01122024232448
+**Run ID**: 11122024164345
 
-**Test Accuracy**: 83%
+**Test Accuracy**: 51%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/01122024232448/run.png)
+![](../models/feature_extractor/runs/11122024164345/run.png)
 
 ### 3.1.3 Data Augmentation - Freeze = 2
 
-**Run ID**: 02122024021619
+**Run ID**: 11122024174536
 
-**Test Accuracy**: 93%
+**Test Accuracy**: 75%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/02122024021619/run.png)
+![](../models/feature_extractor/runs/11122024174536/run.png)
 
 ### 3.1.4 No Data Augmentation - Freeze = 2
 
-**Run ID**: 02122024003640
+**Run ID**: 11122024195525
 
-**Test Accuracy**: 88%
+**Test Accuracy**: 53%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/02122024003640/run.png)
+![](../models/feature_extractor/runs/11122024195525/run.png)
 
 ### 3.2 ResNet101
 
 ### 3.2.1 Data Augmentation - Freeze = 1
 
-**Run ID**: 02122024165018
+**Run ID**: 11122024211526
 
-**Test Accuracy**: 90%
+**Test Accuracy**: 78%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/02122024165018/run.png)
+![](../models/feature_extractor/runs/11122024211526/run.png)
 
 ### 3.2.2 No Data Augmentation - Freeze = 1
 
-**Run ID**: 02122024092202
+**Run ID**: 11122024232001
 
-**Test Accuracy**: 77%
+**Test Accuracy**: 49%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/02122024092202/run.png)
+![](../models/feature_extractor/runs/11122024232001/run.png)
 
 ### 3.2.3 Data Augmentation - Freeze = 2
 
-**Run ID**: 02122024115518
+**Run ID**: 12122024002534
 
-**Test Accuracy**: 92%
+**Test Accuracy**: 74%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/02122024115518/run.png)
+![](../models/feature_extractor/runs/12122024002534/run.png)
 
 ### 3.2.4 No Data Augmentation - Freeze = 2
 
-**Run ID**: 02122024105552
+**Run ID**: 12122024014841
 
-**Test Accuracy**: 81%
+**Test Accuracy**: 50%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/02122024105552/run.png)
+![](../models/feature_extractor/runs/12122024014841/run.png)
 
 ### 3.3 ResNet152
 
 ### 3.3.1 Data Augmentation - Freeze = 1
 
-**Run ID**: 03122024011023
+**Run ID**: 12122024030220
 
-**Test Accuracy**: 93%
+**Test Accuracy**: 75%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/03122024011023/run.png)
+![](../models/feature_extractor/runs/12122024030220/run.png)
 
 ### 3.3.2 No Data Augmentation - Freeze = 1
 
-**Run ID**: 02122024213427
+**Run ID**: 12122024052027
 
-**Test Accuracy**: 88%
+**Test Accuracy**: 51%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/02122024213427/run.png)
+![](../models/feature_extractor/runs/12122024052027/run.png)
 
 ### 3.3.3 Data Augmentation - Freeze = 2
 
-- **Run ID**: 03122024092613
+- **Run ID**: 12122024065037
 
-- **Test Accuracy**: 90%
+- **Test Accuracy**: 75%
 
 - **Grafico dell'addestramento**: 
 
-![](../models/feature_extractor/runs/03122024092613/run.png)
+![](../models/feature_extractor/runs/12122024065037/run.png)
 
 ### 3.3.4 No Data Augmentation - Freeze = 2
 
-**Run ID**: 03122024150252
+**Run ID**: 12122024085028
 
-**Test Accuracy**: 83%
+**Test Accuracy**: 50%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/03122024150252/run.png)
+![](../models/feature_extractor/runs/12122024085028/run.png)
 
 ### 3.4 VGG16
 
 ### 3.4.1 Data Augmentation - Freeze = 1
 
-**Run ID**: 03122024181801
+**Run ID**: 12122024102819
 
-**Test Accuracy**: 94%
+**Test Accuracy**: 63%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/03122024181801/run.png)
+![](../models/feature_extractor/runs/12122024102819/run.png)
 
 ### 3.4.2 No Data Augmentation - Freeze = 1
 
-**Run ID**: 04122024154037
+**Run ID**: 12122024145542
 
-**Test Accuracy**: 83%
+**Test Accuracy**: 49%
 
 **Grafico dell'addestramento**: 
 
-![](../models/feature_extractor/runs/04122024154037/run.png)
+![](../models/feature_extractor/runs/12122024145542/run.png)
 
 ### 3.4.3 Data Augmentation - Freeze = 2
 
-**Run ID**: 05122024001044
+**Run ID**: 12122024155714
 
-**Test Accuracy**: 92%
+**Test Accuracy**: 70%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/05122024001044/run.png)
+![](../models/feature_extractor/runs/12122024155714/run.png)
 
 ### 3.4.4 No Data Augmentation - Freeze = 2
 
-**Run ID**: 05122024075652
+**Run ID**: 12122024173630
 
-**Test Accuracy**: 92%
+**Test Accuracy**: 51%
 
 **Grafico dell'addestramento**: 
 
-![](../models/feature_extractor/runs/05122024075652/run.png)
+![](../models/feature_extractor/runs/12122024173630/run.png)
 
 ### 3.5 ViT B 16
 
 ### 3.5.1 Data Augmentation - Freeze = 1
 
-**Run ID**: 06122024073951
+**Run ID**: 12122024184040
 
-**Test Accuracy**: 90%
+**Test Accuracy**: 65%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/06122024073951/run.png)
+![](../models/feature_extractor/runs/12122024184040/run.png)
 
 ### 3.5.2 No Data Augmentation - Freeze = 1
 
-**Run ID**: 06122024201722
+**Run ID**: 12122024201323
 
-**Test Accuracy**: 80%
+**Test Accuracy**: 48%
 
 **Grafico dell'addestramento**: 
 
-![](../models/feature_extractor/runs/06122024201722/run.png)
+![](../models/feature_extractor/runs/12122024201323/run.png)
 
 ### 3.5.3 Data Augmentation - Freeze = 2
 
-**Run ID**: 07122024104631
+**Run ID**: 12122024212842
 
-**Test Accuracy**: 92%
+**Test Accuracy**: 67%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/07122024104631/run.png)
+![](../models/feature_extractor/runs/12122024212842/run.png)
 
 ### 3.5.4 No Data Augmentation - Freeze = 2
 
-**Run ID**: 07122024163323
+**Run ID**: 13122024010744
 
-**Test Accuracy**: 93%
+**Test Accuracy**: 50%
 
 **Grafico dell'addestramento**:
 
-![](../models/feature_extractor/runs/07122024163323/run.png)
+![](../models/feature_extractor/runs/13122024010744/run.png)
 
 ---
-   
-## 4. Problemi e Limitazioni
-Descrivere eventuali difficoltà incontrate durante l’addestramento, colli di bottiglia, o limitazioni del modello.
 
----
+## 4. Lista configurazioni performanti
+
+Ricordiamoci della legenda, per cui:
+- Freeze = 1 -> solo la testa di classificazione è stata riaddestrata;
+- Freeze = 2 -> è stato riaddestrato l'intero modello;
+- Aug = 1 -> il dataset ha subito data augmentation;
+- Aug = 0 -> il dataset NON ha subito data augmentation.
+
+Verranno adesso elencate le configurazioni che hanno performato meglio per ogni architettura:
+- ResNet50: 
+  - Data Augmentation: 1
+  - Freeze: 1 
+  - Run ID: 11122024151717 
+- ResNet101:
+  - Data Augmentation: 1
+  - Freeze: 1
+  - Run ID: 11122024211526
+- ResNet152:
+  - Data Augmentation: 1
+  - Freeze: 1
+  - Run ID: 12122024030220
+- VGG16:
+  - Data Augmentation: 1
+  - Freeze: 2
+  - Run ID: 12122024155714
+- ViTB16:
+  - Data Augmentation: 1
+  - Freeze: 2
+  - Freeze: 12122024212842
 
 ## 5. Conclusioni e Prossimi Passi
-- **Riepilogo dei risultati principali:**
-- **Proposte per miglioramenti futuri:** 
-  - Ottimizzazione dei dati
-  - Cambiamenti nell'architettura del modello
-  - Utilizzo di nuove tecniche di addestramento
 
----
+Come possiamo vedere dagli esperimenti, generalmente un addestramento limitato alla testa di classificazione del modello sembra performare in maniera migliore rispetto a un riaddestramento totale della rete.
+Inoltre, i modelli sembrano beneficiare delle operazioni di data augmentation operati sui dataset, data la presenza di classi estremamente poco rappresentate.
 
-## 7. Riferimenti
-Elencare fonti o risorse utilizzate, incluse librerie, articoli scientifici, e dataset.
-
----
-
-## 8. Allegati
-Includere eventuali immagini, grafici, o file di log utili per integrare la documentazione.
+I passi successivi dello studio si concentreranno sul modello di VQA vero e proprio, che userà i risultati prodotti da questa analisi per la scelta del codificatore di immagini.
