@@ -342,5 +342,5 @@ def image_transform() -> v2.Compose:
     return transform 
 
 
-            
+
 logger = init_logger(logging)

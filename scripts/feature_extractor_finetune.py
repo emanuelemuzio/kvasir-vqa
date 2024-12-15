@@ -93,8 +93,7 @@ if __name__ == '__main__':
                     args.aug = aug
                     
                     if not (model, freeze, aug) in skip_configs:                    
-                        launch_experiment(args=args, device=device)
-                        
+                        launch_experiment(args=args, device=device)        
     else:
         launch_experiment(args=args, device=device)  
         
