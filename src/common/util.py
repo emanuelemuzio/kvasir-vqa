@@ -8,6 +8,7 @@ import random
 from dotenv import load_dotenv
 import torch
 from torchvision.transforms import v2
+import shutil
 
 load_dotenv()
 
@@ -341,6 +342,38 @@ def image_transform() -> v2.Compose:
 
     return transform 
 
+def update_best_runs(key='', best_run_path='', runs_path='', del_others=False):
+    runs_list = []
+    
+    for run_id in os.listdir(runs_path):
+        if os.path.exists(f"{ROOT}/{runs_path}/{run_id}/run.json"):
+            data = get_run_info(f"{runs_path}/{run_id}/run.json")
+            runs_list.append({
+                "model" : data['model'],
+                "test_acc" : data['test_acc'],
+                "run_id" : run_id
+            })
+        else:
+            os.rmdir(f"{ROOT}/{runs_path}/{run_id}")
 
+    best_runs = {}
 
+    for run in runs_list:
+        model = run[key]
+        test_acc = run['test_acc']
+        run_id = run['run_id']
+
+        if model not in best_runs or test_acc > best_runs[model]['test_acc']:
+            best_runs[model] = {'run_id': run_id, 'test_acc': test_acc}
+        else:
+            if del_others:
+                shutil.rmtree(f"{ROOT}/{runs_path}/{run_id}")
+ 
+    with open(f"{ROOT}/{best_run_path}", "w") as f:
+        json.dump(best_runs, f, indent=4)
+        
+def delete_other_runs(runs_path=''):
+    for run_id in os.listdir(runs_path):
+        shutil.rmtree(f"{ROOT}/{runs_path}/{run_id}")
+        
 logger = init_logger(logging)

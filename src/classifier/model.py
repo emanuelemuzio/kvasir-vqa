@@ -492,7 +492,7 @@ def predict(
             
             img = img.to(device).unsqueeze(0)
             
-            image_feature = feature_extractor(img)
+            image_feature = feature_extractor(img).squeeze(3).squeeze(-1)
             
             output = model(word_embeddings, image_feature).detach().cpu().tolist()
             
@@ -648,7 +648,9 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     elif args.optimizer == 'adamw':
         optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
         
-    early_stopper = EarlyStopper(patience=patience, min_delta=min_delta)
+    min_epochs = args.min_epochs or 0
+        
+    early_stopper = EarlyStopper(patience=patience, min_delta=min_delta, min_epochs=min_epochs)
 
     scheduler = []
     
@@ -738,7 +740,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         config['train_acc'] = train_acc
         config['val_acc'] = val_acc
         config['run_id'] = run_id
-        config['test_accuracy'] = test_acc
+        config['test_acc'] = test_acc
         json.dump(config, f)
 
     os.remove(f"{ROOT}/{os.getenv('CLASSIFIER_CHECKPOINT')}") 

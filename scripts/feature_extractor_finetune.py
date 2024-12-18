@@ -8,7 +8,7 @@ import torch
 import argparse
 import os
 from feature_extractor.model import launch_experiment, ROOT
-from common.util import get_run_info
+from common.util import get_run_info, update_best_runs, delete_other_runs
 
 '''
 The configs dict is going to be useful only if the 'run_all' argument is 1, either way
@@ -61,6 +61,9 @@ if __name__ == '__main__':
     parser.add_argument('--aug', help="'1' for augmented dataset, else '0'")
     parser.add_argument('--run_all', help="1 if ALL configurations have to be tested")
     parser.add_argument('--delete_ckp', help="If equals '1', the existing checkpoint will be deleted")
+    parser.add_argument('--min_epochs', help='Early stopper min. epochs activation')
+    parser.add_argument('--del_others', help='Delete worse runs for the same model')
+    parser.add_argument('--tabula_rasa', help='Delete previous runs (CAREFUL WITH THIS)')
 
     args = parser.parse_args() 
     
@@ -68,10 +71,14 @@ if __name__ == '__main__':
     
     delete_ckp = args.delete_ckp == "1"
     
+    tabula_rasa = args.tabula_rasa == "1"
+    
+    if tabula_rasa:
+        delete_other_runs(os.getenv('FEATURE_EXTRACTOR_RUNS'))
+    
     if delete_ckp:
         if os.path.exists(os.getenv('FEATURE_EXTRACTOR_CHECKPOINT')):
             os.remove(os.getenv('FEATURE_EXTRACTOR_CHECKPOINT'))
-    
     
     if run_all:
     
@@ -98,6 +105,15 @@ if __name__ == '__main__':
         launch_experiment(args=args, device=device)  
         
     turnoff = int(args.turnoff)
+    
+    del_others = args.del_others == '1'
+    
+    update_best_runs(
+        key='model',
+        best_run_path=os.getenv('BEST_RUN_PATH').replace('REPLACE_ME','feature_extractor'),
+        runs_path=os.getenv('FEATURE_EXTRACTOR_RUNS'),
+        del_others=del_others
+    )
         
     if turnoff >= 0:
         os.system(f"shutdown /s /t {turnoff}") 

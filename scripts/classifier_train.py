@@ -9,7 +9,7 @@ import torch
 import argparse
 from dotenv import load_dotenv
 from classifier.model import launch_experiment
-from common.util import ROOT, get_run_info
+from common.util import ROOT, get_run_info, update_best_runs, delete_other_runs
 
 load_dotenv()
 
@@ -55,12 +55,20 @@ if __name__ == '__main__':
     parser.add_argument('--prompting', help="'1' for prompt aided question, else '0'")
     parser.add_argument('--run_all', help="1 if ALL configurations have to be tested")
     parser.add_argument('--delete_ckp', help="If equals '1', the existing checkpoint will be deleted")
+    parser.add_argument('--min_epochs', help='Early stopper min. epochs activation')
+    parser.add_argument('--del_others', help='Delete worse runs for the same model')
+    parser.add_argument('--tabula_rasa', help='Delete previous runs (CAREFUL WITH THIS)')
 
     args = parser.parse_args()
     
     run_all = args.run_all == "1"
     
     delete_ckp = args.delete_ckp == "1"
+    
+    tabula_rasa = args.tabula_rasa == "1"
+    
+    if tabula_rasa:
+        delete_other_runs(os.getenv('FEATURE_EXTRACTOR_RUNS'))
     
     if delete_ckp:
         if os.path.exists(os.getenv('CLASSIFIER_CHECKPOINT')):
@@ -90,6 +98,15 @@ if __name__ == '__main__':
         launch_experiment(args=args, device=device)
     
     turnoff = int(args.turnoff)
+    
+    del_others = args.del_others == '1'
+    
+    update_best_runs(
+        key='architecture',
+        best_run_path=os.getenv('BEST_RUN_PATH').replace('REPLACE_ME','classifier'),
+        runs_path=os.getenv('CLASSIFIER_RUNS'),
+        del_others=del_others
+    )
     
     if turnoff >= 0:
         os.system(f"shutdown /s /t {turnoff}")
