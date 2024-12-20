@@ -33,6 +33,8 @@ def load_kvasir_vqa() -> any:
     ------
     '''
     
+    logger.info("Downloading KvasirVQA metadata and imgs")
+    
     return load_dataset(f"{os.getenv('KVASIR_VQA_DATASET')}")
 
   
@@ -104,9 +106,7 @@ class Dataset_(Dataset):
         self.base_path = base_path
         self.prompt = []
         self.transform = image_transform()
-        self.use_prompt = len(self.prompt) > 0
-        
-        logger.info('Initialized Kvasir VQA Dataset')
+        self.use_prompt = len(self.prompt) > 0 
         
     def add_prompts(self, prompt=[]):
         self.prompt = prompt

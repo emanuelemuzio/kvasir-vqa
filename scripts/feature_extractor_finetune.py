@@ -8,7 +8,7 @@ import torch
 import argparse
 import os
 from feature_extractor.model import launch_experiment, ROOT
-from common.util import get_run_info, update_best_runs, delete_other_runs
+from common.util import get_run_info, update_best_runs, delete_other_runs, logger
 
 '''
 The configs dict is going to be useful only if the 'run_all' argument is 1, either way
@@ -37,6 +37,9 @@ configs = {
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 if __name__ == '__main__':
+    
+    logger.info("Starting feature_extractor_finetune script")
+    
     parser = argparse.ArgumentParser()
     
     '''
@@ -74,10 +77,12 @@ if __name__ == '__main__':
     tabula_rasa = args.tabula_rasa == "1"
     
     if tabula_rasa:
+        logger.info("Deleting previous runs")
         delete_other_runs(os.getenv('FEATURE_EXTRACTOR_RUNS'))
     
     if delete_ckp:
         if os.path.exists(os.getenv('FEATURE_EXTRACTOR_CHECKPOINT')):
+            logger.info("Deleting existing checkpoint")
             os.remove(os.getenv('FEATURE_EXTRACTOR_CHECKPOINT'))
     
     if run_all:
@@ -88,7 +93,7 @@ if __name__ == '__main__':
             run_json_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{run_id}/run.json"
             if os.path.exists(run_json_path):
                 run_info = get_run_info(run_json_path)
-                
+                                
                 skip_configs.append((run_info['model'], run_info['freeze'], run_info['aug']))
                 
         for model in configs['model']:
@@ -99,9 +104,14 @@ if __name__ == '__main__':
                     args.freeze = freeze
                     args.aug = aug
                     
-                    if not (model, freeze, aug) in skip_configs:                    
-                        launch_experiment(args=args, device=device)        
+                    if not (model, freeze, aug) in skip_configs:      
+                        logger.info(f"Running the configuration with model: {model}, freeze: {freeze} and aug: {aug}") 
+                        launch_experiment(args=args, device=device)
+                    else:
+                        logger.info(f"Skipping config with model: {model}, freeze: {freeze} and aug: {aug}")
+                                
     else:
+        logger.info("Launching single experiment")
         launch_experiment(args=args, device=device)  
         
     turnoff = int(args.turnoff)
@@ -116,4 +126,5 @@ if __name__ == '__main__':
     )
         
     if turnoff >= 0:
+        logger.info(f"Turning off in {turnoff} seconds")
         os.system(f"shutdown /s /t {turnoff}") 

@@ -89,7 +89,9 @@ def get_classifier(feature_extractor_name=None, vocabulary_size=0, architecture=
         intermediate_dim=intermediate_dim,
         prompt_tuner=prompt_tuner
         )
-    
+        
+    logger.info(f"Initialized {architecture} classifier")
+        
     return classifier
 
 
@@ -507,6 +509,8 @@ def predict(
     
 def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
+    logger.info(f"Launching experiment with configuration: {args}")
+    
     feature_extractor_run_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{args.feature_extractor}/run.json"
     feature_extractor_weights_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{args.feature_extractor}/model.pt"
     
@@ -514,14 +518,16 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
     feature_extractor_name = get_run_info(run_path=feature_extractor_run_path)['model'] 
     
+    logger.info("Generating run id")
+  
     run_id = generate_run_id()
 
     architecture = args.architecture 
-    
-    logger.info('Recovering classifier model...')
 
     df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_PROMPT_CSV')}") if prompting else pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_CSV')}")
     
+    logger.info("Dataset retrieved")
+        
     df.dropna(axis=0, inplace=True)
     
     kvasir_vqa_datapath = f"{ROOT}/{os.getenv('KVASIR_VQA_DATA')}"
@@ -533,6 +539,8 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     X = df.drop(y_column, axis=1)
     Y = df.drop(x_columns, axis=1)
 
+    logger.info("Splitting data")
+
     X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.3, random_state=RANDOM_SEED) 
     X_test, X_val, Y_test, Y_val = train_test_split(X_test, Y_test, test_size=0.5, random_state=RANDOM_SEED) 
     
@@ -543,6 +551,8 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     X_val = X_val.reset_index()
     Y_val = Y_val.reset_index()
     
+    logger.info('Building dataloaders...')
+ 
     train_dataset = Dataset_(
         source=X_train['source'].to_numpy(), 
         question=X_train['question'].to_numpy(), 
@@ -576,11 +586,15 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
     answer_encoder = LabelEncoder().fit(answers)
     
+    logger.info('Initializing classifier')
+   
     model = get_classifier(feature_extractor_name=feature_extractor_name, vocabulary_size=len(answers), architecture=architecture, inference=False).to(device)
     
     tokenizer = get_tokenizer()
     question_encoder = get_language_model().to(device)
     feature_extractor = init(model_name=feature_extractor_name, weights_path=feature_extractor_weights_path).to(device)
+
+    logger.info('Initialized tokenizer, question encoder and feature extractor')
 
     if device == 'cuda':
         torch.compile(model, 'max-autotune')
@@ -727,6 +741,8 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
     cr.to_csv(f"{run_path}/cr.csv")
     
+    logger.info("Saved test report")
+    
     sns.heatmap(cr, annot=True, ax=ax).get_figure()
     
     fig.savefig(f"{run_path}/cr.png")
@@ -746,3 +762,5 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     os.remove(f"{ROOT}/{os.getenv('CLASSIFIER_CHECKPOINT')}") 
 
     plot_run(base_path=f"{ROOT}/{os.getenv('CLASSIFIER_RUNS')}", run_id=run_id)
+    
+    logger.info("Run plotted and save to run.json file")

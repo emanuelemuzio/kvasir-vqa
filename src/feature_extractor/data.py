@@ -70,9 +70,7 @@ class _Dataset(Dataset):
         self.code = code
         self.bbox = bbox
         self.transform = None
-        self.transform = image_transform()
-        
-        logger.info('Initialized Feature Extractor Dataset')
+        self.transform = image_transform() 
     
     def __len__(self):
         return len(self.code)
@@ -144,7 +142,8 @@ def generate_classes_json(df : pd.DataFrame) -> None:
 
     with open(f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_CLASSES')}", 'w') as f:
         json.dump(classes, f)
-
+    
+    logger.info("Generated JSON for feature extractor classes")
 
 
 def prepare_data(data_path:str, aug=False) -> pd.DataFrame:
@@ -177,6 +176,8 @@ def prepare_data(data_path:str, aug=False) -> pd.DataFrame:
     
     if os.path.exists(data_path):
         df = pd.read_csv(data_path)
+        
+        logger.info(f"Data already exists, retrieving from {data_path}")
 
         df['bbox'] = df['bbox'].apply(format_bbox)
 
@@ -312,6 +313,7 @@ def prepare_data(data_path:str, aug=False) -> pd.DataFrame:
             generate_classes_json(df)
     
     if not os.path.exists(f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_CLASSES')}"):
+        logger.info("Generatint JSON classes file")
         generate_classes_json(df)
 
     return df

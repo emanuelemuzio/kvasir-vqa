@@ -343,6 +343,11 @@ def image_transform() -> v2.Compose:
     return transform 
 
 def update_best_runs(key='', best_run_path='', runs_path='', del_others=False):
+    
+    subject = 'feature extractor' if key == 'model' else 'classifier'
+    
+    logger.info(f"Updating runs for {subject}")
+    
     runs_list = []
     
     for run_id in os.listdir(runs_path):
@@ -354,6 +359,7 @@ def update_best_runs(key='', best_run_path='', runs_path='', del_others=False):
                 "run_id" : run_id
             })
         else:
+            logger.info(f"Cleaning {runs_path}/{run_id} directory")
             os.rmdir(f"{ROOT}/{runs_path}/{run_id}")
 
     best_runs = {}
@@ -364,6 +370,7 @@ def update_best_runs(key='', best_run_path='', runs_path='', del_others=False):
         run_id = run['run_id']
 
         if model not in best_runs or test_acc > best_runs[model]['test_acc']:
+            logger.info(f"New best run with id {run_id} for model {model}")
             best_runs[model] = {'run_id': run_id, 'test_acc': test_acc}
         else:
             if del_others:
@@ -374,6 +381,7 @@ def update_best_runs(key='', best_run_path='', runs_path='', del_others=False):
         
 def delete_other_runs(runs_path=''):
     for run_id in os.listdir(runs_path):
+        logger.info(f"Deleting run with id: {run_id}")
         shutil.rmtree(f"{ROOT}/{runs_path}/{run_id}")
         
 logger = init_logger(logging)

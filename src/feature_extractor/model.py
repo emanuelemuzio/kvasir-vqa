@@ -124,6 +124,8 @@ def get_model(model_name='vitb16', num_classes=0, freeze='2'):
         elif freeze == '2':
             for param in model.parameters():
                 param.requires_grad = True
+                
+    logger.info(f"Retrieved {model_name} model with freeze: {freeze}")
 
     return model
 
@@ -443,6 +445,8 @@ def init(model_name='resnet152', weights_path=os.getenv('FEATURE_EXTRACTOR_MODEL
     elif model_name.startswith('vit'):
         model.heads = torch.nn.Sequential(torch.nn.Identity())
         feature_extractor = model
+        
+    logger.info(f"{model_name} feature extractor initialized")
 
     return feature_extractor
 
@@ -462,6 +466,8 @@ def launch_experiment(args : argparse.Namespace, device : str) -> None:
     ---------- 
     '''
     
+    logger.info(f"Launching experiment with configuration: {args}")
+    
     freeze = args.freeze or '2'
 
     model_name = args.model or 'resnet152'
@@ -476,6 +482,10 @@ def launch_experiment(args : argparse.Namespace, device : str) -> None:
     class_names = get_class_names()
     
     dataset = prepare_data(csv_path, aug=use_aug)  
+    
+    logger.info("Dataset retrieved")
+    
+    logger.info("Splitting data")
     
     y_column = 'label'
     x_columns = dataset.columns.to_list()
@@ -658,6 +668,8 @@ def launch_experiment(args : argparse.Namespace, device : str) -> None:
     
     cr.to_csv(f"{run_path}/cr.csv")
     
+    logger.info("Saved test report")
+    
     sns.heatmap(cr, annot=True, ax=ax).get_figure()
     
     fig.savefig(f"{run_path}/cr.png")
@@ -677,3 +689,5 @@ def launch_experiment(args : argparse.Namespace, device : str) -> None:
     os.remove(f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_CHECKPOINT')}")
 
     plot_run(base_path=f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}", run_id=run_id)
+    
+    logger.info("Run plotted and save to run.json file")

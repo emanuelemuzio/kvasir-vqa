@@ -8,7 +8,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "--turnoff=0",
+                "--turnoff=-1",
                 "--num_epochs=200",
                 "--batch_size=32",
                 "--lr=0.0005",
@@ -28,7 +28,7 @@
                 "--delete_ckp=1",
                 "--min_epochs=40",
                 "--del_others=1",
-                "--tabula_rasa=1"
+                "--tabula_rasa=0"
             ]
         },
         {
