@@ -27,8 +27,8 @@
                 "--run_all=1",
                 "--delete_ckp=1",
                 "--min_epochs=40",
-                "--del_others=1",
-                "--tabula_rasa=0"
+                "--del_others=0",
+                "--tabula_rasa=1"
             ]
         },
         {
@@ -38,11 +38,11 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "--architecture=hadamard",
+                "--architecture=conv",
                 "--turnoff=1",
-                "--num_epochs=200",
+                "--num_epochs=300",
                 "--batch_size=16",
-                "--lr=0.005",
+                "--lr=0.0002",
                 "--momentum=0.9",
                 "--T_max=100",
                 "--eta_min=0.001",
@@ -54,9 +54,10 @@
                 "--weight_decay=0.01",
                 "--feature_extractor=13122024010744",
                 "--prompting=0",
-                "--run_all=1",
-                "--delete_ckp=1",
-                "--min_epochs=50"
+                "--run_all=0",
+                "--delete_ckp=0",
+                "--min_epochs=40",
+                "--use_best_fe=1"
             ]
         }
     ]

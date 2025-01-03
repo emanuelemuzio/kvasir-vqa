@@ -571,6 +571,7 @@ def launch_experiment(args : argparse.Namespace, device : str) -> None:
     run_path = None
     
     if os.path.exists(f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_CHECKPOINT')}"):
+        min_epochs = 0
         checkpoint = torch.load(f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_CHECKPOINT')}", weights_only=True)
         model.load_state_dict(checkpoint['model_state_dict'])
         start_epoch = checkpoint['num_epochs']

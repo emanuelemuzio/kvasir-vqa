@@ -16,7 +16,7 @@ from common.util import ROOT, logger, get_run_info, generate_run_id, plot_run
 from common.prompt_tuning import PromptTuning
 from torcheval.metrics.functional import multiclass_accuracy
 from common.earlystop import EarlyStopper
-from classifier.architecture import HadamardClassifier, ConcatClassifier
+from classifier.architecture import HadamardClassifier, ConcatClassifier, ConvVQA, BiggerConvVQA
 from classifier.data import Dataset_
 from dotenv import load_dotenv
 from question_encode.model import get_tokenizer, get_language_model
@@ -88,6 +88,14 @@ def get_classifier(feature_extractor_name=None, vocabulary_size=0, architecture=
         image_feature_dim=image_feature_dim,
         intermediate_dim=intermediate_dim,
         prompt_tuner=prompt_tuner
+        )
+    elif architecture == 'conv':
+        classifier = ConvVQA(
+            vocabulary_size=vocabulary_size
+        )
+    elif architecture == 'biggerconv':
+        classifier = BiggerConvVQA(
+            vocabulary_size=vocabulary_size
         )
         
     logger.info(f"Initialized {architecture} classifier")
@@ -636,6 +644,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     run_path = None 
     
     if os.path.exists(f"{ROOT}/{os.getenv('CLASSIFIER_CHECKPOINT')}"):
+        min_epochs = 0
         checkpoint = torch.load(f"{ROOT}/{os.getenv('CLASSIFIER_CHECKPOINT')}", weights_only=True)
         model.load_state_dict(checkpoint['model_state_dict'])
         start_epoch = checkpoint['num_epochs']
@@ -662,7 +671,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     elif args.optimizer == 'adamw':
         optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
         
-    min_epochs = args.min_epochs or 0
+    min_epochs = int(args.min_epochs) or 0
         
     early_stopper = EarlyStopper(patience=patience, min_delta=min_delta, min_epochs=min_epochs)
 

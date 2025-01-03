@@ -384,4 +384,25 @@ def delete_other_runs(runs_path=''):
         logger.info(f"Deleting run with id: {run_id}")
         shutil.rmtree(f"{ROOT}/{runs_path}/{run_id}")
         
+
+def get_best_feature_extractor_info():
+    best_run_path = os.getenv('BEST_RUN_PATH').replace('REPLACE_ME', 'feature_extractor')
+    
+    f = open(f"{ROOT}/{best_run_path}")
+    data = json.load(f)
+    
+    best_acc = -1
+    best_config = {}
+    
+    for model_name in data.keys():
+        if data[model_name]['test_acc'] > best_acc:
+            best_acc = data[model_name]['test_acc']
+            best_config = {
+                'model_name' : model_name,
+                'test_acc' : data[model_name]['test_acc'],
+                'run_id' : data[model_name]['run_id']
+            }
+            
+    return best_config
+        
 logger = init_logger(logging)

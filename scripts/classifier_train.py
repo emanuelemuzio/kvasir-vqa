@@ -9,7 +9,7 @@ import torch
 import argparse
 from dotenv import load_dotenv
 from classifier.model import launch_experiment
-from common.util import ROOT, get_run_info, update_best_runs, delete_other_runs
+from common.util import ROOT, get_run_info, update_best_runs, delete_other_runs, get_best_feature_extractor_info
 
 load_dotenv()
 
@@ -56,19 +56,20 @@ if __name__ == '__main__':
     parser.add_argument('--run_all', help="1 if ALL configurations have to be tested")
     parser.add_argument('--delete_ckp', help="If equals '1', the existing checkpoint will be deleted")
     parser.add_argument('--min_epochs', help='Early stopper min. epochs activation')
-    parser.add_argument('--del_others', help='Delete worse runs for the same model')
-    parser.add_argument('--tabula_rasa', help='Delete previous runs (CAREFUL WITH THIS)')
+    parser.add_argument('--use_best_fe', help="'1' to use the feature extractor with the highest test accuracy")
 
     args = parser.parse_args()
     
     run_all = args.run_all == "1"
-    
+        
     delete_ckp = args.delete_ckp == "1"
     
-    tabula_rasa = args.tabula_rasa == "1"
+    use_best_fe = args.use_best_fe == "1"
     
-    if tabula_rasa:
-        delete_other_runs(os.getenv('FEATURE_EXTRACTOR_RUNS'))
+    if use_best_fe:
+        best_fe_info = get_best_feature_extractor_info()
+        configs['feature_extractor'] = [best_fe_info['model_name']]
+        args.feature_extractor = best_fe_info['run_id']
     
     if delete_ckp:
         if os.path.exists(os.getenv('CLASSIFIER_CHECKPOINT')):
