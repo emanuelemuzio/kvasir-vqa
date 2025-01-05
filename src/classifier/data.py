@@ -10,6 +10,9 @@ import torch
 from common.util import logger, ROOT, image_transform
 from common.prompt_tuning import PromptTuning
 import pandas as pd
+from PIL import Image
+from random import randint as rand
+from torchvision.transforms import v2
 
 RANDOM_SEED = int(os.getenv('RANDOM_SEED'))
 
@@ -161,3 +164,55 @@ def generate_prompt_dataset() -> None:
     except Exception as e:
         logger.error("An error occurred during prompt generation")
         
+def augment_image(src : str, code : str, num : int) -> list:
+    
+    '''
+    ------
+    Parameters
+        src: str
+            Full path to image
+        code: str
+            Image unique identifier
+        num: int
+            Number of augmentations to perform per image
+    ------
+    
+    ------
+    Return
+        data: list
+            List that contains paths to all new images generated
+    ------
+    '''
+
+    data = []
+
+    random_rotations = []
+    
+    img = Image.open(src)
+
+    for i in range(num):
+        r_min = None
+        r_max = None
+
+        while True:
+            r_min = rand(0, 180)
+            r_max = rand(180, 270)
+
+            if (r_min, r_max) not in random_rotations:
+                random_rotations.append((r_min, r_max))
+                break
+        
+        transform = v2.Compose([
+                    v2.RandomHorizontalFlip(),
+                    v2.RandomRotation((r_min, r_max))])
+        
+        aug = transform(img)
+
+        new_code = f"{code}-aug-{i + 1}"
+
+        new = f"{ROOT}/{os.getenv('AUGMENTED_DATA')}/{new_code}.jpg"
+
+        aug.save(new)
+        data.append(new_code)
+
+    return data

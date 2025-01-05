@@ -498,7 +498,7 @@ def predict(
             token_type_ids = inputs['token_type_ids'].to(device)
             attention_mask = inputs['attention_mask'].to(device)
 
-            word_embeddings = question_encoder(input_ids, attention_mask = attention_mask, token_type_ids = token_type_ids).last_hidden_state[:,0,:].squeeze().to(device)
+            word_embeddings = question_encoder(input_ids, attention_mask = attention_mask, token_type_ids = token_type_ids).last_hidden_state[:,0,:].to(device)
             
             img = img.to(device).unsqueeze(0)
             
@@ -549,8 +549,8 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
 
     logger.info("Splitting data")
 
-    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.3, random_state=RANDOM_SEED) 
-    X_test, X_val, Y_test, Y_val = train_test_split(X_test, Y_test, test_size=0.5, random_state=RANDOM_SEED) 
+    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.3, stratify=Y, random_state=RANDOM_SEED) 
+    X_test, X_val, Y_test, Y_val = train_test_split(X_test, Y_test, test_size=0.5, stratify=Y_test, random_state=RANDOM_SEED) 
     
     X_train = X_train.reset_index()
     Y_train = Y_train.reset_index()

@@ -206,7 +206,7 @@ class ConvVQA(nn.Module):
     
 class BiggerConvVQA(nn.Module):
     def __init__(self, vocabulary_size):
-        super(ConvVQA, self).__init__()
+        super(BiggerConvVQA, self).__init__()
         
         # Prima convoluzione: in_channels=1 (per input 1D), out_channels=16
         self.conv1 = nn.Conv1d(in_channels=1, out_channels=16, kernel_size=3, stride=1, padding=1)
