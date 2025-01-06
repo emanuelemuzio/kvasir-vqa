@@ -494,8 +494,8 @@ def launch_experiment(args : argparse.Namespace, device : str) -> None:
     X = dataset.drop(y_column, axis=1)
     Y = dataset.drop(x_columns, axis=1)
 
-    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.3, stratify=Y, random_state=RANDOM_SEED) 
-    X_test, X_val, Y_test, Y_val = train_test_split(X_test, Y_test, test_size=0.5, stratify=Y_test, random_state=RANDOM_SEED) 
+    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.3, stratify=Y, random_state=RANDOM_SEED, shuffle=True) 
+    X_test, X_val, Y_test, Y_val = train_test_split(X_test, Y_test, test_size=0.5, stratify=Y_test, random_state=RANDOM_SEED, shuffle=True) 
     
     X_train = X_train.reset_index()
     Y_train = Y_train.reset_index()

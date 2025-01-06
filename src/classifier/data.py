@@ -100,13 +100,14 @@ class Dataset_(Dataset):
     ------
     '''
     
-    def __init__(self, source=[], question=[], answer=[], img_id=[],  base_path=''):  
+    def __init__(self, source=[], question=[], answer=[], img_id=[],  base_path='', aug_path=''):  
         
         self.source = source
         self.question = question
         self.answer = answer
         self.img_id = img_id
         self.base_path = base_path
+        self.aug_path = aug_path
         self.prompt = []
         self.transform = image_transform()
         self.use_prompt = len(self.prompt) > 0 
@@ -127,9 +128,7 @@ class Dataset_(Dataset):
         if use_prompt:
             question += self.prompt[idx]
         
-        base_path = self.base_path
-        
-        full_path = f"{base_path}/{img_id}.jpg"
+        full_path = f"{self.aug_path}/{img_id}.jpg" if 'aug' in img_id else f"{self.base_path}/{img_id}.jpg" 
         img = read_image(full_path)         
 
         transformed_image = self.transform(img.float())
@@ -144,21 +143,29 @@ def generate_prompt_dataset() -> None:
         logger.info('Generating questions prompt')  
             
         df = pd.read_csv(os.getenv('KVASIR_VQA_CSV')) 
+        df_aug = pd.read_csv(os.getenv('KVASIR_VQA_CSV_AUG')) 
             
         questions = df['question'].unique().tolist()
+        questions_aug = df['question'].unique().tolist()
         
         prompt_tuning = PromptTuning(os.getenv('PROMPT_TUNING_MODEL'))
             
         prompted_questions = prompt_tuning.generate(question=questions)
+        prompted_questions_aug = prompt_tuning.generate(question=questions_aug)
             
         logger.info("Finished prompt generation")
         
         df['prompt'] = np.nan
+        df_aug['prompt'] = np.nan
                         
         for question, prompted_question in zip(questions, prompted_questions):
             df.loc[df['question'] == question, 'prompt'] = prompted_question
+        
+        for question_aug, prompted_question_aug in zip(questions_aug, prompted_questions_aug):
+            df_aug.loc[df_aug['question'] == question_aug, 'prompt'] = prompted_question_aug
             
         df.to_csv(os.getenv('KVASIR_VQA_PROMPT_CSV'), index=False)
+        df_aug.to_csv(os.getenv('KVASIR_VQA_PROMPT_CSV_AUG'), index=False)
             
         logger.info("Csv file saved")
     except Exception as e:
@@ -261,7 +268,7 @@ def augment_image_where(src : str, code : str, num : int) -> list:
 
     return data
 
-def augment_kvasir_vqa(df : pd.DataFrame, answ_list : list):
+def augment_kvasir_vqa(df : pd.DataFrame, answ_list : list, threshold : int):
     
     header = ['source', 'question', 'answer', 'img_id']
     rows = []
@@ -272,16 +279,16 @@ def augment_kvasir_vqa(df : pd.DataFrame, answ_list : list):
         
         data = []
         
-        single_row = df[(df['answer'] == a)]
-        src = f"{base_path}/{single_row['img_id'].iloc[0]}.jpg"
-        code = single_row['img_id'].iloc[0]
-        question = single_row['question'].iloc[0]
-        source_cat = single_row['source'].iloc[0]
+        filter_row = df[(df['answer'] == a)]
+        src = f"{base_path}/{filter_row['img_id'].iloc[0]}.jpg"
+        code = filter_row['img_id'].iloc[0]
+        question = filter_row['question'].iloc[0]
+        source_cat = filter_row['source'].iloc[0]
         
         if 'Where' in question:
-            data.extend(augment_image_where(src=src, code=code, num=6))
+            data.extend(augment_image_where(src=src, code=code, num=threshold-len(filter_row)))
         else:
-            data.extend(augment_image(src=src, code=code, num=6))
+            data.extend(augment_image(src=src, code=code, num=threshold-len(filter_row)))
             
         for d in data:
             rows.append([source_cat, question, a, d])

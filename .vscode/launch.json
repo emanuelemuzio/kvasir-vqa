@@ -57,7 +57,8 @@
                 "--run_all=0",
                 "--delete_ckp=0",
                 "--min_epochs=40",
-                "--use_best_fe=1"
+                "--use_best_fe=1",
+                "--use_aug=1"
             ]
         }
     ]

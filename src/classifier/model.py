@@ -523,6 +523,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     feature_extractor_weights_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{args.feature_extractor}/model.pt"
     
     prompting = args.prompting == '1'
+    use_aug = args.use_aug == '1'
     
     feature_extractor_name = get_run_info(run_path=feature_extractor_run_path)['model'] 
     
@@ -531,26 +532,52 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     run_id = generate_run_id()
 
     architecture = args.architecture 
-
-    df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_PROMPT_CSV')}") if prompting else pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_CSV')}")
+    
+    df = None
+    
+    kvasir_vqa_datapath = f"{ROOT}/{os.getenv('KVASIR_VQA_DATA')}"
+    kvasir_vqa_datapath_aug = f"{ROOT}/{os.getenv('KVASIR_VQA_DATA_AUG')}"
+    
+    if prompting:
+        if use_aug:
+            df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_PROMPT_CSV_AUG')}")
+        else:
+            df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_PROMPT_CSV')}")
+    else:
+        if use_aug:
+            df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_CSV_AUG')}")
+        else:
+            df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_CSV')}") 
     
     logger.info("Dataset retrieved")
         
     df.dropna(axis=0, inplace=True)
-    
-    kvasir_vqa_datapath = f"{ROOT}/{os.getenv('KVASIR_VQA_DATA')}"
     
     y_column = 'answer'
     x_columns = df.columns.to_list()
     x_columns.remove(y_column)
     
     X = df.drop(y_column, axis=1)
-    Y = df.drop(x_columns, axis=1)
+    Y = df[y_column]
 
     logger.info("Splitting data")
 
-    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.3, stratify=Y, random_state=RANDOM_SEED) 
-    X_test, X_val, Y_test, Y_val = train_test_split(X_test, Y_test, test_size=0.5, stratify=Y_test, random_state=RANDOM_SEED) 
+    X_train, X_test, Y_train, Y_test = train_test_split(
+        X, Y, 
+        test_size=0.4, 
+        stratify=Y, 
+        random_state=RANDOM_SEED, 
+        shuffle=True
+    )
+
+    X_test, X_val, Y_test, Y_val = train_test_split(
+        X_test, Y_test, 
+        test_size=0.5,   
+        stratify=Y_test, 
+        random_state=RANDOM_SEED, 
+        shuffle=True
+    )
+
     
     X_train = X_train.reset_index()
     Y_train = Y_train.reset_index()
@@ -566,7 +593,8 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         question=X_train['question'].to_numpy(), 
         answer=Y_train['answer'].to_numpy(), 
         img_id=X_train['img_id'].to_numpy(), 
-        base_path=kvasir_vqa_datapath
+        base_path=kvasir_vqa_datapath,
+        aug_path=kvasir_vqa_datapath_aug
     )
         
     test_dataset = Dataset_(
@@ -574,7 +602,8 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         question=X_test['question'].to_numpy(), 
         answer=Y_test['answer'].to_numpy(), 
         img_id=X_test['img_id'].to_numpy(),
-        base_path=kvasir_vqa_datapath
+        base_path=kvasir_vqa_datapath,
+        aug_path=kvasir_vqa_datapath_aug
     )
     
     val_dataset = Dataset_(
@@ -582,7 +611,8 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         question=X_val['question'].to_numpy(), 
         answer=Y_val['answer'].to_numpy(), 
         img_id=X_val['img_id'].to_numpy(), 
-        base_path=kvasir_vqa_datapath
+        base_path=kvasir_vqa_datapath,
+        aug_path=kvasir_vqa_datapath_aug
     )
     
     if prompting: 

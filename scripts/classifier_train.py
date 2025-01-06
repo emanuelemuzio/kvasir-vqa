@@ -57,6 +57,7 @@ if __name__ == '__main__':
     parser.add_argument('--delete_ckp', help="If equals '1', the existing checkpoint will be deleted")
     parser.add_argument('--min_epochs', help='Early stopper min. epochs activation')
     parser.add_argument('--use_best_fe', help="'1' to use the feature extractor with the highest test accuracy")
+    parser.add_argument('--use_aug', help="'1' to use augmented data (important for data balance of kvasirvqa dataset)")
 
     args = parser.parse_args()
     
