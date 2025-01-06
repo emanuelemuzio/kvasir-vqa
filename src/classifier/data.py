@@ -210,9 +210,82 @@ def augment_image(src : str, code : str, num : int) -> list:
 
         new_code = f"{code}-aug-{i + 1}"
 
-        new = f"{ROOT}/{os.getenv('AUGMENTED_DATA')}/{new_code}.jpg"
+        new = f"{ROOT}/{os.getenv('KVASIR_VQA_DATA_AUG')}/{new_code}.jpg"
 
         aug.save(new)
         data.append(new_code)
 
     return data
+
+def augment_image_where(src : str, code : str, num : int) -> list:
+    
+    '''
+    Function that augment images from KvasirVQA that do not require rotation because
+    the answer related to that is a positional one.
+    ------
+    Parameters
+        src: str
+            Full path to image
+        code: str
+            Image unique identifier
+        num: int
+            Number of augmentations to perform per image
+    ------
+    
+    ------
+    Return
+        data: list
+            List that contains paths to all new images generated
+    ------
+    '''
+
+    data = []
+
+    transform = v2.Compose([
+        v2.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.05),
+        v2.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 0.5)),  
+    ])
+    
+    img = Image.open(src)
+
+    for i in range(num): 
+        
+        aug = transform(img)
+
+        new_code = f"{code}-aug-{i + 1}"
+
+        new = f"{ROOT}/{os.getenv('KVASIR_VQA_DATA_AUG')}/{new_code}.jpg"
+
+        aug.save(new)
+        data.append(new_code)
+
+    return data
+
+def augment_kvasir_vqa(df : pd.DataFrame, answ_list : list):
+    
+    header = ['source', 'question', 'answer', 'img_id']
+    rows = []
+    
+    base_path = f"{ROOT}/{os.getenv('KVASIR_VQA_DATA')}"
+    
+    for a in answ_list:
+        
+        data = []
+        
+        single_row = df[(df['answer'] == a)]
+        src = f"{base_path}/{single_row['img_id'].iloc[0]}.jpg"
+        code = single_row['img_id'].iloc[0]
+        question = single_row['question'].iloc[0]
+        source_cat = single_row['source'].iloc[0]
+        
+        if 'Where' in question:
+            data.extend(augment_image_where(src=src, code=code, num=6))
+        else:
+            data.extend(augment_image(src=src, code=code, num=6))
+            
+        for d in data:
+            rows.append([source_cat, question, a, d])
+            
+    df_aug = pd.DataFrame(data=rows, columns=header)
+
+    return df_aug
