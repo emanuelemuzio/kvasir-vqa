@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 import torch
 from torchvision.transforms import v2
 import pandas as pd
+from common.util import init_kvasir_vocab
 
 RANDOM_SEED = int(os.getenv('RANDOM_SEED'))
 
@@ -77,6 +78,7 @@ class Dataset_(Dataset):
         answer = self.answer[idx]
         img_id = self.img_id[idx]
         use_prompt = self.use_prompt
+        answer_list = [a.strip() for a in answer.split(';')]
         
         if use_prompt:
             question += self.prompt[idx]
@@ -98,17 +100,14 @@ class Dataset_(Dataset):
         encoding['answer'] = answer
         
         targets = torch.zeros(len(self.config.id2label))
-        targets[self.config.label2id[answer]] = 1
+        for vocab in answer_list:        
+            targets[self.config.label2id[vocab]] = 1 
         encoding["labels"] = targets
-        encoding["target"] = self.config.label2id[answer]
 
         return encoding
     
 def get_config():
-    dataset = pd.read_csv(os.getenv('KVASIR_VQA_CSV'))
-    dataset.dropna(inplace=True)
-    
-    labels = dataset['answer'].unique()
+    labels = init_kvasir_vocab()
     ids = [i for i in range(len(labels))]
     
     label2id = {label : idx for (label, idx) in zip(labels, ids)}

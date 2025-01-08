@@ -48,7 +48,7 @@ class Dataset_(Dataset):
     ------
     '''
     
-    def __init__(self, source=[], question=[], answer=[], img_id=[],  base_path='', aug_path='', processor=None, config=None):  
+    def __init__(self, source=[], question=[], answer=[], img_id=[],  base_path='', aug_path='', processor=None):  
         
         self.source = source
         self.question = question
@@ -63,7 +63,6 @@ class Dataset_(Dataset):
         ])
         self.use_prompt = len(self.prompt) > 0 
         self.processor = processor
-        self.config = config
         
     def add_prompts(self, prompt=[]):
         self.prompt = prompt
@@ -85,23 +84,23 @@ class Dataset_(Dataset):
         img = self.transform(read_image(full_path))
 
         encoding = self.processor(
-            images=img,
-            text=question,
-            padding="max_length",   
-            truncation=True,    
-            return_tensors="pt"  
-        ) 
+            img, 
+            question, 
+            padding="max_length", 
+            truncation=True, 
+            return_tensors="pt"
+        )
         
-        for k,v in encoding.items():
-          encoding[k] = v.squeeze()
+        labels = self.processor.tokenizer.encode(
+            answer, max_length= 8, 
+            pad_to_max_length=True, 
+            return_tensors='pt'
+        )
         
-        encoding['answer'] = answer
-        
-        targets = torch.zeros(len(self.config.id2label))
-        targets[self.config.label2id[answer]] = 1
-        encoding["labels"] = targets
-        encoding["target"] = self.config.label2id[answer]
-
+        encoding["labels"] = labels
+        # remove batch dimension
+        for k,v in encoding.items():  
+            encoding[k] = v.squeeze()
         return encoding
     
 def get_config():

@@ -11,15 +11,15 @@ import json
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from common.util import ROOT, logger, generate_run_id, plot_run
-from torcheval.metrics.functional import multiclass_accuracy
 from common.earlystop import EarlyStopper
-from vilt.data import Dataset_, get_config
+from blip.data import Dataset_
 from dotenv import load_dotenv
 from sklearn.metrics import classification_report
 from torch import optim
-from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR
+from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR, ExponentialLR, StepLR
 from sklearn.model_selection import train_test_split
 from matplotlib import pyplot as plt
+from transformers import BlipProcessor, BlipForQuestionAnswering
 
 load_dotenv()      
 RANDOM_SEED = int(os.getenv('RANDOM_SEED'))
@@ -32,6 +32,7 @@ def evaluate(
             optimizer : torch.optim, 
             scheduler : list, 
             device : str, 
+            scaler,
             train_dataset : DataLoader, 
             val_dataset : DataLoader, 
             early_stopper : EarlyStopper, 
@@ -125,11 +126,10 @@ def evaluate(
 
         epoch_train_loss, epoch_train_acc = train(
             model,
-            processor,
+            scaler,
             train_dataloader, 
             optimizer, 
-            device, 
-            scheduler
+            device
         )
         
         train_loss.append(epoch_train_loss)
@@ -137,8 +137,8 @@ def evaluate(
         
         epoch_val_loss, epoch_val_acc = val(
             model, 
-            val_dataloader, 
-            processor,
+            val_dataloader,
+            scheduler, 
             device
         )
         
@@ -160,7 +160,7 @@ def evaluate(
                 'val_loss' : val_loss,
                 'val_acc' : val_acc,
                 'run_id' : run_id
-            }, f"{ROOT}/{os.getenv('VILT_CHECKPOINT')}") 
+            }, f"{ROOT}/{os.getenv('BLIP_CHECKPOINT')}") 
 
             logger.info('Checkpoint reached')
             
@@ -174,11 +174,10 @@ def evaluate(
 
 def train(
     model,
-    processor,
+    scaler,
     train_dataset : Dataset_, 
     optimizer : torch.optim, 
-    device : str, 
-    scheduler : list):
+    device : str):
     
     '''
     Train step function
@@ -221,43 +220,32 @@ def train(
     train_loss = 0.0
     train_acc = 0.0
 
-    for batch in train_dataset:
+    for idx, batch in zip(tqdm(range(len(train_dataset)), desc='Training batch: ...'), train_dataset):
         
-        input_ids = [item for item in batch['input_ids']]
-        pixel_values = [item for item in batch['pixel_values']]
-        attention_mask = [item for item in batch['attention_mask']]
-        token_type_ids = [item for item in batch['token_type_ids']]
-        labels = [item for item in batch['labels']]
+        input_ids = batch.pop('input_ids').to(device)
+        pixel_values = batch.pop('pixel_values').to(device)
+        attention_masked = batch.pop('attention_mask').to(device)
+        labels = batch.pop('labels').to(device)
         
-        encoding = processor.image_processor.pad(pixel_values, return_tensors="pt").to(device)
-        
-        data = {}
-        data['input_ids'] = torch.stack(input_ids)
-        data['attention_mask'] = torch.stack(attention_mask)
-        data['token_type_ids'] = torch.stack(token_type_ids)
-        data['pixel_values'] = encoding['pixel_values']
-        data['pixel_mask'] = encoding['pixel_mask']
-        data['labels'] = torch.stack(labels)
-        
-        data = {k:v.to(device) for k,v in data.items()}
-        
-        output = model(**data)
-
-        loss = output.loss
-        loss.backward()
-        optimizer.step() 
-        
-        targets = torch.tensor([item for item in batch['target']]).to(device)
-        acc = multiclass_accuracy(output['logits'], targets) 
-        train_acc += acc.item()
+        with torch.amp.autocast(device_type='cuda', dtype=torch.float16):
+            outputs = model(input_ids=input_ids,
+                        pixel_values=pixel_values,
+                        # attention_mask=attention_masked,
+                        labels=labels)
+            
+        loss = outputs.loss
         train_loss += loss.item()
+        # loss.backward()
+        # optimizer.step()
+        optimizer.zero_grad()
+        
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
         
         del(batch)
         if device == 'cuda':
             torch.cuda.empty_cache()
-
-    for s in scheduler:
-        s.step()
 
     train_loss = train_loss / len(train_dataset)
     train_acc = train_acc / len(train_dataset)
@@ -267,6 +255,7 @@ def train(
 def val(
     model, 
     val_dataset : Dataset_,  
+    scheduler,
     processor,
     device : str):
     
@@ -310,44 +299,34 @@ def val(
     val_acc = 0.0
         
     with torch.no_grad():
-        for batch in val_dataset:
-        
-            input_ids = [item for item in batch['input_ids']]
-            pixel_values = [item for item in batch['pixel_values']]
-            attention_mask = [item for item in batch['attention_mask']]
-            token_type_ids = [item for item in batch['token_type_ids']]
-            labels = [item for item in batch['labels']]
+        for idx, batch in zip(range(len(val_dataset)), val_dataset):
             
-            encoding = processor.image_processor.pad(pixel_values, return_tensors="pt").to(device)
-            
-            data = {}
-            data['input_ids'] = torch.stack(input_ids)
-            data['attention_mask'] = torch.stack(attention_mask)
-            data['token_type_ids'] = torch.stack(token_type_ids)
-            data['pixel_values'] = encoding['pixel_values']
-            data['pixel_mask'] = encoding['pixel_mask']
-            data['labels'] = torch.stack(labels)
-            
-            data = {k:v.to(device) for k,v in data.items()}
-            
-            output = model(**data)
+            input_ids = batch.pop('input_ids').to(device)
+            pixel_values = batch.pop('pixel_values').to(device)
+            attention_masked = batch.pop('attention_mask').to(device)
+            labels = batch.pop('labels').to(device)
 
-            loss = output.loss
+            with torch.amp.autocast(device_type='cuda', dtype=torch.float16):
+                outputs = model(input_ids=input_ids,
+                            pixel_values=pixel_values,
+                            attention_mask=attention_masked,
+                            labels=labels)
+                
+                loss = outputs.loss
+                val_loss += loss.item()
             
-            targets = torch.tensor([item for item in batch['target']]).to(device)
-            acc = multiclass_accuracy(output['logits'], targets) 
-            val_acc += acc.item()
-            val_loss += loss.item()
-            
-            del(batch)
-            if device == 'cuda':
-                torch.cuda.empty_cache()
+                del(batch)
+                if device == 'cuda':
+                    torch.cuda.empty_cache()
 
         # Calculate validation loss
         val_loss /= len(val_dataset)
 
         # Calculate validation accuracy
         val_acc = val_acc / len(val_dataset) 
+        
+        for s in scheduler:
+            s.step(val_loss)
 
         return val_loss, val_acc 
     
@@ -393,15 +372,10 @@ def predict(
                 
     return predictions, target
     
-from transformers import ViltProcessor, ViltConfig, ViltForQuestionAnswering
-
 def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
-    processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-mlm")
-    config = ViltConfig.from_dict(get_config())
-    model = ViltForQuestionAnswering.from_pretrained("dandelin/vilt-b32-mlm",
-                                                 id2label=config.id2label,
-                                                 label2id=config.label2id)
+    model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
+    processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
     model.to(device)
     
     logger.info(f"Launching experiment with configuration: {args}")
@@ -540,9 +514,9 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
 
     run_path = None 
     
-    if os.path.exists(f"{ROOT}/{os.getenv('VILT_CHECKPOINT')}"):
+    if os.path.exists(f"{ROOT}/{os.getenv('BLIP_CHECKPOINT')}"):
         min_epochs = 0
-        checkpoint = torch.load(f"{ROOT}/{os.getenv('VILT_CHECKPOINT')}", weights_only=True)
+        checkpoint = torch.load(f"{ROOT}/{os.getenv('BLIP_CHECKPOINT')}", weights_only=True)
         model.load_state_dict(checkpoint['model_state_dict'])
         start_epoch = checkpoint['num_epochs']
         train_loss_ckp = checkpoint['train_loss']
@@ -550,11 +524,11 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         val_loss_ckp = checkpoint['val_loss']
         val_acc_ckp = checkpoint['val_acc']
         run_id = checkpoint['run_id']
-        run_path = f"{ROOT}/{os.getenv('VILT_RUNS')}/{run_id}"
+        run_path = f"{ROOT}/{os.getenv('BLIP_RUNS')}/{run_id}"
         logger.info(f'Loaded run {run_id} checkpoint')
     else:
         logger.info(f'New run: {run_id}')
-        run_path = f"{ROOT}/{os.getenv('VILT_RUNS')}/{run_id}"
+        run_path = f"{ROOT}/{os.getenv('BLIP_RUNS')}/{run_id}"
         os.mkdir(run_path)
         
     # Define optimizer, scheduler and early stop
@@ -577,14 +551,20 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     scheduler_names = args.scheduler.split(',')
 
     for name in scheduler_names:
-        if args.scheduler == 'plateau':
+        if name == 'plateau':
             scheduler.append(ReduceLROnPlateau(optimizer=optimizer, mode=mode))
-        elif args.scheduler == 'cosine':
+        elif name == 'cosine':
             scheduler.append(CosineAnnealingLR(optimizer=optimizer, T_max=T_max, eta_min=eta_min))
-        elif args.scheduler == 'linear':
+        elif name == 'linear':
             scheduler.append(LinearLR(optimizer=optimizer))
+        elif name == 'exponential':
+            scheduler.append(ExponentialLR(optimizer=optimizer, gamma=0.9, last_epoch=-1, verbose=False))
+        elif name == 'step':
+            scheduler.append(StepLR(optimizer, step_size=15, gamma=0.1))
 
     test_run = args.test_run or None
+    
+    scaler = torch.amp.GradScaler()
     
     train_loss = None
     train_acc = None
@@ -594,7 +574,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
     if test_run is not None:
         run_id = test_run
-        run_path = f"{ROOT}/{os.getenv('VILT_RUNS')}/{run_id}"
+        run_path = f"{ROOT}/{os.getenv('BLIP_RUNS')}/{run_id}"
         run = torch.load(f"{run_path}/model.pt", weights_only=True)
         best_weights = run['model_state_dict']
         train_loss = run['train_loss']
@@ -614,6 +594,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
             optimizer=optimizer, 
             scheduler=scheduler,
             device=device, 
+            scaler=scaler,
             train_dataset=train_dataset, 
             val_dataset=val_dataset, 
             early_stopper=early_stopper, 
@@ -675,8 +656,8 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         config['test_acc'] = test_acc
         json.dump(config, f)
 
-    os.remove(f"{ROOT}/{os.getenv('VILT_CHECKPOINT')}") 
+    os.remove(f"{ROOT}/{os.getenv('BLIP_CHECKPOINT')}") 
 
-    plot_run(base_path=f"{ROOT}/{os.getenv('VILT_RUNS')}", run_id=run_id)
+    plot_run(base_path=f"{ROOT}/{os.getenv('BLIP_RUNS')}", run_id=run_id)
     
     logger.info("Run plotted and save to run.json file")

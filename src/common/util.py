@@ -9,6 +9,11 @@ from dotenv import load_dotenv
 import torch
 from torchvision.transforms import v2
 import shutil
+from rouge import Rouge 
+from nltk.translate.bleu_score import sentence_bleu
+from nltk.translate import meteor
+from nltk import word_tokenize
+rouge = Rouge()
 
 load_dotenv()
 
@@ -436,5 +441,57 @@ def get_best_feature_extractor_info():
             }
             
     return best_config
-        
+
+def calculate_rouge(candidate, reference):
+    '''
+    candidate, reference: generated and ground-truth sentences
+    '''
+    scores = rouge.get_scores([candidate], reference)
+    return scores
+
+def calculate_bleu(candidate, reference):
+    '''
+    candidate, reference: generated and ground-truth sentences
+    '''
+    reference = word_tokenize(reference)
+    candidate = word_tokenize(candidate)
+    score = sentence_bleu(reference, candidate)
+    return score
+
+def calculate_meteor(candidate, reference):
+    '''
+    candidate, reference: tokenized list of words in the sentence
+    '''
+    reference = word_tokenize(reference)
+    candidate = word_tokenize(candidate)
+    meteor_score = round(meteor([candidate],reference), 4)
+    return meteor_score
+
+def init_kvasir_vocab():
+    f = open(f"{ROOT}/{os.getenv('KVASIR_VQA_VOCABULARY')}")
+    return json.load(f)
+
+def multilabel_accuracy(predictions, targets, threshold=0.5):
+    """
+    Calcola l'accuracy per classificazione multilabel.
+    
+    Args:
+        predictions (torch.Tensor): Tensor delle predizioni del modello, con shape (batch_size, num_classes).
+                                    Sono valori grezzi (logits) o probabilità.
+        targets (torch.Tensor): Tensor dei target reali, con shape (batch_size, num_classes).
+                                Contiene valori binari (0 o 1).
+        threshold (float): Soglia per classificare le predizioni in classi attive.
+
+    Returns:
+        float: Accuracy multilabel come frazione di predizioni corrette.
+    """
+    # Binarizza le predizioni usando la soglia
+    predicted_labels = (predictions > threshold).int()
+    
+    # Confronta le predizioni con i target
+    correct = (predicted_labels == targets).sum().item()
+    total = targets.numel()  # Numero totale di elementi (batch_size * num_classes)
+    
+    return correct / total  
+
 logger = init_logger(logging)

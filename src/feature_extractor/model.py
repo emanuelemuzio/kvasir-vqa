@@ -23,7 +23,7 @@ from sklearn.metrics import classification_report
 from common.earlystop import EarlyStopper
 from common.util import generate_run_id, ROOT, plot_run, logger
 from feature_extractor.data import _Dataset, prepare_data, get_class_names
-from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR
+from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR, ExponentialLR, StepLR
 from torch import optim
 from torch.nn import CrossEntropyLoss
 from sklearn.model_selection import train_test_split
@@ -607,12 +607,16 @@ def launch_experiment(args : argparse.Namespace, device : str) -> None:
     scheduler_names = args.scheduler.split(',')
 
     for name in scheduler_names:
-        if args.scheduler == 'plateau':
+        if name == 'plateau':
             scheduler.append(ReduceLROnPlateau(optimizer=optimizer, mode=mode))
-        elif args.scheduler == 'cosine':
+        elif name == 'cosine':
             scheduler.append(CosineAnnealingLR(optimizer=optimizer, T_max=T_max, eta_min=eta_min))
-        elif args.scheduler == 'linear':
+        elif name == 'linear':
             scheduler.append(LinearLR(optimizer=optimizer))
+        elif name == 'exponential':
+            scheduler.append(ExponentialLR(optimizer=optimizer, gamma=0.9, last_epoch=-1, verbose=False))
+        elif name == 'step':
+            scheduler.append(StepLR(optimizer, step_size=15, gamma=0.1))
 
     logger.info('Starting model evaluation')
 

@@ -40,7 +40,7 @@ La struttura del progetto è la seguente:
 
 |--```models```
 
-|----```vilt``` _cartella contenente dati relativi agli esperimenti con architettura Vilt_
+|----```vilt``` _cartella contenente dati relativi agli esperimenti con architettura ViLT_
 
 |----```blip``` _cartella contenente dati relativi agli esperimenti con architettura BLIP_
 

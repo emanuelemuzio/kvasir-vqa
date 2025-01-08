@@ -10,16 +10,16 @@ import seaborn as sns
 import json
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from common.util import ROOT, logger, generate_run_id, plot_run
-from torcheval.metrics.functional import multiclass_accuracy
+from common.util import ROOT, logger, generate_run_id, plot_run, multilabel_accuracy
 from common.earlystop import EarlyStopper
 from vilt.data import Dataset_, get_config
 from dotenv import load_dotenv
 from sklearn.metrics import classification_report
 from torch import optim
-from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR
+from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR, ExponentialLR, StepLR
 from sklearn.model_selection import train_test_split
 from matplotlib import pyplot as plt
+from transformers import ViltProcessor, ViltConfig, ViltForQuestionAnswering
 
 load_dotenv()      
 RANDOM_SEED = int(os.getenv('RANDOM_SEED'))
@@ -128,8 +128,7 @@ def evaluate(
             processor,
             train_dataloader, 
             optimizer, 
-            device, 
-            scheduler
+            device
         )
         
         train_loss.append(epoch_train_loss)
@@ -137,7 +136,8 @@ def evaluate(
         
         epoch_val_loss, epoch_val_acc = val(
             model, 
-            val_dataloader, 
+            val_dataloader,
+            scheduler, 
             processor,
             device
         )
@@ -177,8 +177,7 @@ def train(
     processor,
     train_dataset : Dataset_, 
     optimizer : torch.optim, 
-    device : str, 
-    scheduler : list):
+    device : str):
     
     '''
     Train step function
@@ -247,17 +246,12 @@ def train(
         loss.backward()
         optimizer.step() 
         
-        targets = torch.tensor([item for item in batch['target']]).to(device)
-        acc = multiclass_accuracy(output['logits'], targets) 
-        train_acc += acc.item()
+        train_acc += multilabel_accuracy(output['logits'], data['labels'], threshold=0.5)
         train_loss += loss.item()
         
         del(batch)
         if device == 'cuda':
             torch.cuda.empty_cache()
-
-    for s in scheduler:
-        s.step()
 
     train_loss = train_loss / len(train_dataset)
     train_acc = train_acc / len(train_dataset)
@@ -267,6 +261,7 @@ def train(
 def val(
     model, 
     val_dataset : Dataset_,  
+    scheduler,
     processor,
     device : str):
     
@@ -335,8 +330,7 @@ def val(
             loss = output.loss
             
             targets = torch.tensor([item for item in batch['target']]).to(device)
-            acc = multiclass_accuracy(output['logits'], targets) 
-            val_acc += acc.item()
+            val_acc += multilabel_accuracy(output['logits'], targets)
             val_loss += loss.item()
             
             del(batch)
@@ -348,6 +342,9 @@ def val(
 
         # Calculate validation accuracy
         val_acc = val_acc / len(val_dataset) 
+        
+        for s in scheduler:
+            s.step(val_loss)
 
         return val_loss, val_acc 
     
@@ -393,8 +390,6 @@ def predict(
                 
     return predictions, target
     
-from transformers import ViltProcessor, ViltConfig, ViltForQuestionAnswering
-
 def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
     processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-mlm")
@@ -577,12 +572,16 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     scheduler_names = args.scheduler.split(',')
 
     for name in scheduler_names:
-        if args.scheduler == 'plateau':
+        if name == 'plateau':
             scheduler.append(ReduceLROnPlateau(optimizer=optimizer, mode=mode))
-        elif args.scheduler == 'cosine':
+        elif name == 'cosine':
             scheduler.append(CosineAnnealingLR(optimizer=optimizer, T_max=T_max, eta_min=eta_min))
-        elif args.scheduler == 'linear':
+        elif name == 'linear':
             scheduler.append(LinearLR(optimizer=optimizer))
+        elif name == 'exponential':
+            scheduler.append(ExponentialLR(optimizer=optimizer, gamma=0.9, last_epoch=-1, verbose=False))
+        elif name == 'step':
+            scheduler.append(StepLR(optimizer, step_size=15, gamma=0.1))
 
     test_run = args.test_run or None
     

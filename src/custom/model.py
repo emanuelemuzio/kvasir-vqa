@@ -24,7 +24,7 @@ from feature_extractor.model import init
 from torch.nn import CrossEntropyLoss
 from sklearn.metrics import classification_report
 from torch import optim
-from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR
+from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR, ExponentialLR, StepLR
 from sklearn.model_selection import train_test_split
 from matplotlib import pyplot as plt
 
@@ -710,12 +710,16 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     scheduler_names = args.scheduler.split(',')
 
     for name in scheduler_names:
-        if args.scheduler == 'plateau':
+        if name == 'plateau':
             scheduler.append(ReduceLROnPlateau(optimizer=optimizer, mode=mode))
-        elif args.scheduler == 'cosine':
+        elif name == 'cosine':
             scheduler.append(CosineAnnealingLR(optimizer=optimizer, T_max=T_max, eta_min=eta_min))
-        elif args.scheduler == 'linear':
+        elif name == 'linear':
             scheduler.append(LinearLR(optimizer=optimizer))
+        elif name == 'exponential':
+            scheduler.append(ExponentialLR(optimizer=optimizer, gamma=0.9, last_epoch=-1, verbose=False))
+        elif name == 'step':
+            scheduler.append(StepLR(optimizer, step_size=15, gamma=0.1))
 
     logger.info('Starting model evaluation')
 
