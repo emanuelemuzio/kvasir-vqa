@@ -11,6 +11,7 @@ import torch
 import argparse
 from dotenv import load_dotenv
 from vilt.model import launch_experiment
+from common.util import update_best_runs_v2
 
 load_dotenv()
 
@@ -42,10 +43,15 @@ if __name__ == '__main__':
     delete_ckp = args.delete_ckp == "1"
     
     if delete_ckp:
-        if os.path.exists(os.getenv('CLASSIFIER_CHECKPOINT')):
-            os.remove(os.getenv('CLASSIFIER_CHECKPOINT'))        
+        if os.path.exists(os.getenv('VILT_CHECKPOINT')):
+            os.remove(os.getenv('VILT_CHECKPOINT'))        
         
     launch_experiment(args=args, device=device)
+    
+    update_best_runs_v2(
+        best_run_path=os.getenv('BEST_RUN_PATH').replace('REPLACE_ME','vilt'),
+        runs_path=os.getenv('VILT_RUNS')
+    )
     
     turnoff = int(args.turnoff)
     

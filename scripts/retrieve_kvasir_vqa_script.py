@@ -4,7 +4,7 @@ sys.path.append('src')
 import warnings
 warnings.filterwarnings('ignore')
 
-from classifier.data import retrieve_kvasir_vqa_dataset
+from kvasirvqa.data import retrieve_kvasir_vqa_dataset
 from common.util import logger
 
 if __name__ == '__main__':

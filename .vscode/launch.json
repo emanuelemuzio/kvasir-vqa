@@ -2,7 +2,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Feature Extractor Train",
+            "name": "Feature Extractor",
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
@@ -32,7 +32,7 @@
             ]
         },
         {
-            "name": "Classifier train",
+            "name": "Custom architecture",
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
@@ -62,12 +62,13 @@
             ]
         },
         {
-            "name": "ViLT train",
+            "name": "BLIP",
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
+                "--model=blip",
                 "--turnoff=-1",
                 "--num_epochs=300",
                 "--batch_size=10",
@@ -83,8 +84,37 @@
                 "--weight_decay=0.001",
                 "--prompting=0",
                 "--delete_ckp=0",
-                "--min_epochs=40",
-                "--use_aug=1"
+                "--min_epochs=20",
+                "--use_aug=1",
+                "--test_run="
+            ]
+        },
+        {
+            "name": "ViLT",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "--model=vilt",
+                "--turnoff=-1",
+                "--num_epochs=100",
+                "--batch_size=6",
+                "--lr=0.00005",
+                "--momentum=0.9",
+                "--T_max=100",
+                "--eta_min=0.001",
+                "--patience=10",
+                "--min_delta=0.005",
+                "--scheduler=plateau",
+                "--optimizer=adam",
+                "--mode=min",
+                "--weight_decay=0.0001",
+                "--prompting=0",
+                "--delete_ckp=0",
+                "--min_epochs=20",
+                "--use_aug=1",
+                "--test_run="
             ]
         }
     ]

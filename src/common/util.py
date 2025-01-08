@@ -379,6 +379,38 @@ def update_best_runs(key='', best_run_path='', runs_path='', del_others=False):
     with open(f"{ROOT}/{best_run_path}", "w") as f:
         json.dump(best_runs, f, indent=4)
         
+def update_best_runs_v2(best_run_path='', runs_path=''):
+    
+    logger.info(f"Updating best runs in {best_run_path}")
+    
+    runs_list = []
+    
+    for run_id in os.listdir(runs_path):
+        if os.path.exists(f"{ROOT}/{runs_path}/{run_id}/run.json"):
+            data = get_run_info(f"{runs_path}/{run_id}/run.json")
+            runs_list.append({
+                "model" : data['model'],
+                "test_acc" : data['test_acc'],
+                "run_id" : run_id
+            })
+        else:
+            logger.info(f"Cleaning {runs_path}/{run_id} directory")
+            os.rmdir(f"{ROOT}/{runs_path}/{run_id}")
+
+    best_runs = {}
+
+    for run in runs_list:
+        model = run['model']
+        test_acc = run['test_acc']
+        run_id = run['run_id']
+
+        if model not in best_runs or test_acc > best_runs[model]['test_acc']:
+            logger.info(f"New best run with id {run_id} for model {model}")
+            best_runs[model] = {'run_id': run_id, 'test_acc': test_acc}
+ 
+    with open(f"{ROOT}/{best_run_path}", "w") as f:
+        json.dump(best_runs, f, indent=4)
+        
 def delete_other_runs(runs_path=''):
     for run_id in os.listdir(runs_path):
         logger.info(f"Deleting run with id: {run_id}")
