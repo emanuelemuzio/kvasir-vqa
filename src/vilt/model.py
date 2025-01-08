@@ -12,12 +12,10 @@ from sklearn.preprocessing import LabelEncoder
 from transformers import AutoTokenizer, AutoModel
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from common.util import ROOT, logger, get_run_info, generate_run_id, plot_run
-from common.prompt_tuning import PromptTuning
+from common.util import ROOT, logger, generate_run_id, plot_run
 from torcheval.metrics.functional import multiclass_accuracy
 from common.earlystop import EarlyStopper
-from classifier.architecture import HadamardClassifier, ConcatClassifier, ConvVQA, BiggerConvVQA
-from classifier.data import Dataset_
+from vilt.data import Dataset_, get_config
 from dotenv import load_dotenv
 from question_encode.model import get_tokenizer, get_language_model
 from feature_extractor.model import init
@@ -30,82 +28,10 @@ from matplotlib import pyplot as plt
 
 load_dotenv()      
 RANDOM_SEED = int(os.getenv('RANDOM_SEED'))
-    
-    
-    
-def get_classifier(feature_extractor_name=None, vocabulary_size=0, architecture=None, inference=False):
-    
-    '''
-    Classifier initialization function
-    
-    Parameters
-    ------------------
-        feature_extractor_name: str
-            Used for choosing the CNN base model for the feature extraction
-        vocabulary_size: int
-            Num. of answers that the classifier knows
-        architecture: str
-            Based on the named architecture, a different model will be used
-        inference: bool
-            True for prompt tuner instantiation, else False
-    ------------------
-    
-    Return
-    ------
-        classifier: Classifier
-            Initialized classifier model
-    ------
-    '''
-    
-    prompt_tuner = PromptTuning(os.getenv('PROMPT_TUNING_MODEL')) if inference else None
-    
-    question_embedding_dim = int(os.getenv('EMBEDDING_DIM'))
-    image_feature_dim = -1
-    
-    intermediate_dim = int(os.getenv('CLASSIFIER_INTERMEDIATE_DIM'))
-    
-    if feature_extractor_name.startswith('resnet'):
-        image_feature_dim = int(os.getenv('RESNET_FEATURE_SIZE'))
-    elif feature_extractor_name.startswith('vgg'):
-        image_feature_dim = int(os.getenv('VGG_FEATURE_SIZE'))
-    elif feature_extractor_name.startswith('vit'):
-        image_feature_dim = int(os.getenv('VIT_FEATURE_SIZE'))
-        
-    classifier = None
-    
-    if architecture == 'hadamard':
-        classifier = HadamardClassifier(
-        vocabulary_size=vocabulary_size,
-        question_embedding_dim=question_embedding_dim,
-        image_feature_dim=image_feature_dim,
-        intermediate_dim=intermediate_dim,
-        prompt_tuner=prompt_tuner
-        )
-    elif architecture == 'concat':
-        classifier = ConcatClassifier(
-        vocabulary_size=vocabulary_size,
-        question_embedding_dim=question_embedding_dim,
-        image_feature_dim=image_feature_dim,
-        intermediate_dim=intermediate_dim,
-        prompt_tuner=prompt_tuner
-        )
-    elif architecture == 'conv':
-        classifier = ConvVQA(
-            vocabulary_size=vocabulary_size
-        )
-    elif architecture == 'biggerconv':
-        classifier = BiggerConvVQA(
-            vocabulary_size=vocabulary_size
-        )
-        
-    logger.info(f"Initialized {architecture} classifier")
-        
-    return classifier
-
-
 
 def evaluate(
-            model : ConcatClassifier|HadamardClassifier, 
+            model, 
+            processor,
             num_epochs : int, 
             batch_size : int, 
             optimizer : torch.optim, 
@@ -113,13 +39,7 @@ def evaluate(
             device : str, 
             train_dataset : DataLoader, 
             val_dataset : DataLoader, 
-            criterion : torch.nn, 
             early_stopper : EarlyStopper, 
-            answer_encoder : LabelEncoder,
-            max_length : int, 
-            tokenizer : AutoTokenizer,
-            feature_extractor,
-            question_encoder : AutoModel,
             train_loss_ckp = [],
             train_acc_ckp = [],
             val_loss_ckp = [],
@@ -147,8 +67,6 @@ def evaluate(
             'cuda' or 'pc'
         train_dataset/val_dataset: torch Dataset
             Dataset objects, used for creating torch DataLoaders
-        criterion: torch loss
-            Torch Loss object, in this case Cross Entropy Loss
         early_stopper: EarlyStopper
             EarlyStopper object for interrupting evaluation early 
         answer_encoder: LabelEncoder
@@ -212,14 +130,9 @@ def evaluate(
 
         epoch_train_loss, epoch_train_acc = train(
             model,
+            processor,
             train_dataloader, 
-            criterion, 
             optimizer, 
-            answer_encoder, 
-            max_length, 
-            tokenizer,
-            question_encoder,
-            feature_extractor,
             device, 
             scheduler
         )
@@ -229,13 +142,8 @@ def evaluate(
         
         epoch_val_loss, epoch_val_acc = val(
             model, 
+            processor,
             val_dataloader, 
-            criterion, 
-            answer_encoder, 
-            max_length, 
-            question_encoder,
-            tokenizer,
-            feature_extractor, 
             device
         )
         
@@ -270,15 +178,10 @@ def evaluate(
 
 
 def train(
-    model : ConcatClassifier|HadamardClassifier,
+    model,
+    processor,
     train_dataset : Dataset_, 
-    criterion : torch.nn, 
     optimizer : torch.optim, 
-    answer_encoder : LabelEncoder, 
-    max_length : int,
-    tokenizer : AutoTokenizer,
-    question_encoder : AutoModel,
-    feature_extractor,
     device : str, 
     scheduler : list):
     
@@ -291,8 +194,6 @@ def train(
             Classifier model
         train_dataset: Dataset
             Dataset object
-        criterion: torch loss
-            Torch Loss object, in this case Cross Entropy Loss
         optimizer: torch optimizer
             Torch optimizer (Adam, SGD, AdamW)
         answer_encoder: LabelEncoder
@@ -325,40 +226,38 @@ def train(
     train_loss = 0.0
     train_acc = 0.0
 
-    for i, (img, question, answer) in enumerate(train_dataset):
+    for batch in train_dataset:
         
-        optimizer.zero_grad() 
+        input_ids = [item for item in batch['input_ids']]
+        pixel_values = [item for item in batch['pixel_values']]
+        attention_mask = [item for item in batch['attention_mask']]
+        token_type_ids = [item for item in batch['token_type_ids']]
+        labels = [item for item in batch['labels']]
         
-        inputs = tokenizer(
-                        question, 
-                        add_special_tokens=True, 
-                        return_tensors='pt', 
-                        padding='max_length', 
-                        max_length=max_length, 
-                        truncation=True).to(device)
+        encoding = processor.image_processor.pad(pixel_values, return_tensors="pt").to(device)
         
-        input_ids = inputs['input_ids'].to(device)
-        token_type_ids = inputs['token_type_ids'].to(device)
-        attention_mask = inputs['attention_mask'].to(device)
+        data = {}
+        data['input_ids'] = torch.stack(input_ids)
+        data['attention_mask'] = torch.stack(attention_mask)
+        data['token_type_ids'] = torch.stack(token_type_ids)
+        data['pixel_values'] = encoding['pixel_values']
+        data['pixel_mask'] = encoding['pixel_mask']
+        data['labels'] = torch.stack(labels)
+        
+        data = {k:v.to(device) for k,v in data.items()}
+        
+        output = model(**data)
 
-        word_embeddings = question_encoder(input_ids, attention_mask = attention_mask, token_type_ids = token_type_ids).last_hidden_state[:,0,:].squeeze().to(device)
-        
-        img = img.to(device)
-        
-        image_feature = feature_extractor(img).squeeze()
-        
-        output = model(word_embeddings, image_feature)
-        
-        target = (torch.tensor(answer_encoder.transform(answer))).to(device)
-
-        loss = criterion(output, target)
+        loss = output.loss
         loss.backward()
         optimizer.step() 
         
-        acc = multiclass_accuracy(output, target) 
+        targets = torch.tensor([item for item in batch['target']]).to(device)
+        acc = multiclass_accuracy(output['logits'], targets) 
         train_acc += acc.item()
         train_loss += loss.item()
         
+        del(batch)
         if device == 'cuda':
             torch.cuda.empty_cache()
 
@@ -370,17 +269,10 @@ def train(
 
     return train_loss, train_acc
 
-
-
 def val(
-    model : ConcatClassifier|HadamardClassifier, 
-    val_dataset : Dataset_, 
-    criterion : torch.nn,  
-    answer_encoder : LabelEncoder, 
-    max_length : int,
-    question_encoder : AutoModel,
-    tokenizer : AutoTokenizer,
-    feature_extractor,
+    model, 
+    val_dataset : Dataset_,  
+    processor,
     device : str):
     
     '''
@@ -392,8 +284,6 @@ def val(
             Classifier model
         val_dataset: torch Dataset
             Dataset object
-        criterion: torch loss
-            Torch Loss object, in this case Cross Entropy Loss
         optimizer: torch optimizer
             Torch optimizer (Adam, SGD, AdamW)
         answer_encoder: LabelEncoder
@@ -425,37 +315,37 @@ def val(
     val_acc = 0.0
         
     with torch.no_grad():
-        for i, (img, question, answer) in enumerate(val_dataset):
-            
-            inputs = tokenizer(
-                        question, 
-                        add_special_tokens=True, 
-                        return_tensors='pt', 
-                        padding='longest', 
-                        max_length=max_length, 
-                        truncation=True).to(device)
+        for batch in val_dataset:
         
-            input_ids = inputs['input_ids'].to(device)
-            token_type_ids = inputs['token_type_ids'].to(device)
-            attention_mask = inputs['attention_mask'].to(device)
+            input_ids = [item for item in batch['input_ids']]
+            pixel_values = [item for item in batch['pixel_values']]
+            attention_mask = [item for item in batch['attention_mask']]
+            token_type_ids = [item for item in batch['token_type_ids']]
+            labels = [item for item in batch['labels']]
+            
+            encoding = processor.image_processor.pad(pixel_values, return_tensors="pt").to(device)
+            
+            data = {}
+            data['input_ids'] = torch.stack(input_ids)
+            data['attention_mask'] = torch.stack(attention_mask)
+            data['token_type_ids'] = torch.stack(token_type_ids)
+            data['pixel_values'] = encoding['pixel_values']
+            data['pixel_mask'] = encoding['pixel_mask']
+            data['labels'] = torch.stack(labels)
+            
+            data = {k:v.to(device) for k,v in data.items()}
+            
+            output = model(**data)
 
-            word_embeddings = question_encoder(input_ids, attention_mask = attention_mask, token_type_ids = token_type_ids).last_hidden_state[:,0,:].squeeze().to(device)
+            loss = output.loss
+            loss.backward()
             
-            img = img.to(device)
+            targets = torch.tensor([item for item in batch['target']]).to(device)
+            acc = multiclass_accuracy(output['logits'], targets) 
+            train_acc += acc.item()
+            train_loss += loss.item()
             
-            image_feature = feature_extractor(img).squeeze()
-            
-            output = model(word_embeddings, image_feature) 
-            
-            target = (torch.tensor(answer_encoder.transform(answer))).to(device)
-            
-            loss = criterion(output, target)
-            
-            acc = multiclass_accuracy(output, target)
-            val_acc += acc.item()
-            val_loss += loss.item()
-            
-        
+            del(batch)
             if device == 'cuda':
                 torch.cuda.empty_cache()
 
@@ -470,12 +360,8 @@ def val(
 def predict(
     model, 
     device,
-    dataset,
-    tokenizer, 
-    max_length,
-    question_encoder,
-    feature_extractor,
-    answer_encoder
+    processor,
+    dataset
     ):
     
     model.eval()
@@ -484,54 +370,54 @@ def predict(
     target = []
         
     with torch.no_grad():
-        for i, (img, question, answer) in enumerate(dataset):
+        for item in dataset:
+            input_ids = item['input_ids']
+            pixel_values = item['pixel_values']
+            attention_mask = item['attention_mask']
+            token_type_ids = item['token_type_ids']
+            labels = item['labels']
             
-            inputs = tokenizer(
-                        question, 
-                        add_special_tokens=True, 
-                        return_tensors='pt', 
-                        padding='longest', 
-                        max_length=max_length, 
-                        truncation=True).to(device)
-        
-            input_ids = inputs['input_ids'].to(device)
-            token_type_ids = inputs['token_type_ids'].to(device)
-            attention_mask = inputs['attention_mask'].to(device)
+            encoding = processor.image_processor.pad(pixel_values, return_tensors="pt").to(device)
+            
+            data = {}
+            data['input_ids'] = torch.stack(input_ids)
+            data['attention_mask'] = torch.stack(attention_mask)
+            data['token_type_ids'] = torch.stack(token_type_ids)
+            data['pixel_values'] = encoding['pixel_values']
+            data['pixel_mask'] = encoding['pixel_mask']
+            data['labels'] = torch.stack(labels)
+            
+            data = {k:v.to(device) for k,v in data.items()}
+            
+            output = model(**data)
 
-            word_embeddings = question_encoder(input_ids, attention_mask = attention_mask, token_type_ids = token_type_ids).last_hidden_state[:,0,:].to(device)
+            targets = torch.tensor([item for item in batch['target']]).to(device)
             
-            img = img.to(device).unsqueeze(0)
-            
-            image_feature = feature_extractor(img).squeeze(3).squeeze(-1)
-            
-            output = model(word_embeddings, image_feature).detach().cpu().tolist()
-            
-            predictions.append(output)
-            target.append(answer_encoder.transform([answer])[0])            
-        
+            del(batch)
             if device == 'cuda':
                 torch.cuda.empty_cache()
                 
     return predictions, target
     
-    
+from transformers import ViltProcessor, ViltConfig, ViltForQuestionAnswering
+
 def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
-    logger.info(f"Launching experiment with configuration: {args}")
+    processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-mlm")
+    config = ViltConfig.from_dict(get_config())
+    model = ViltForQuestionAnswering.from_pretrained("dandelin/vilt-b32-mlm",
+                                                 id2label=config.id2label,
+                                                 label2id=config.label2id)
+    model.to(device)
     
-    feature_extractor_run_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{args.feature_extractor}/run.json"
-    feature_extractor_weights_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{args.feature_extractor}/model.pt"
+    logger.info(f"Launching experiment with configuration: {args}")
     
     prompting = args.prompting == '1'
     use_aug = args.use_aug == '1'
     
-    feature_extractor_name = get_run_info(run_path=feature_extractor_run_path)['model'] 
-    
     logger.info("Generating run id")
   
-    run_id = generate_run_id()
-
-    architecture = args.architecture 
+    run_id = generate_run_id() 
     
     df = None
     
@@ -559,7 +445,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
     X = df.drop(y_column, axis=1)
     Y = df[y_column]
-
+    
     logger.info("Splitting data")
 
     X_train, X_test, Y_train, Y_test = train_test_split(
@@ -577,7 +463,6 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         random_state=RANDOM_SEED, 
         shuffle=True
     )
-
     
     X_train = X_train.reset_index()
     Y_train = Y_train.reset_index()
@@ -594,7 +479,9 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         answer=Y_train['answer'].to_numpy(), 
         img_id=X_train['img_id'].to_numpy(), 
         base_path=kvasir_vqa_datapath,
-        aug_path=kvasir_vqa_datapath_aug
+        aug_path=kvasir_vqa_datapath_aug,
+        processor=processor,
+        config=config
     )
         
     test_dataset = Dataset_(
@@ -603,7 +490,9 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         answer=Y_test['answer'].to_numpy(), 
         img_id=X_test['img_id'].to_numpy(),
         base_path=kvasir_vqa_datapath,
-        aug_path=kvasir_vqa_datapath_aug
+        aug_path=kvasir_vqa_datapath_aug,
+        processor=processor,
+        config=config
     )
     
     val_dataset = Dataset_(
@@ -612,7 +501,9 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         answer=Y_val['answer'].to_numpy(), 
         img_id=X_val['img_id'].to_numpy(), 
         base_path=kvasir_vqa_datapath,
-        aug_path=kvasir_vqa_datapath_aug
+        aug_path=kvasir_vqa_datapath_aug,
+        processor=processor,
+        config=config
     )
     
     if prompting: 
@@ -620,28 +511,12 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         test_dataset.add_prompts(X_test['prompt'])
         val_dataset.add_prompts(X_val['prompt'])
     
-    answers = list(set(df['answer']))
-    
-    answer_encoder = LabelEncoder().fit(answers)
-    
-    logger.info('Initializing classifier')
-   
-    model = get_classifier(feature_extractor_name=feature_extractor_name, vocabulary_size=len(answers), architecture=architecture, inference=False).to(device)
-    
-    tokenizer = get_tokenizer()
-    question_encoder = get_language_model().to(device)
-    feature_extractor = init(model_name=feature_extractor_name, weights_path=feature_extractor_weights_path).to(device)
-
-    logger.info('Initialized tokenizer, question encoder and feature extractor')
-
     if device == 'cuda':
         torch.compile(model, 'max-autotune')
 
     logger.info('Declaring hyper parameters')
     
     # Train run hyper parameters
-
-    criterion = CrossEntropyLoss()
 
     # Training loop
 
@@ -663,8 +538,6 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     patience = int(args.patience) or 5
     min_delta = float(args.min_delta) or 0.01
         
-    max_length = int(os.getenv('MAX_QUESTION_LENGTH'))
-
     train_loss_ckp = None
     train_acc_ckp = None
     val_loss_ckp = None
@@ -721,6 +594,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
 
     train_loss, train_acc, val_loss, val_acc, best_weights = evaluate(
         model=model, 
+        processor=processor,
         num_epochs=num_epochs, 
         batch_size=batch_size,
         optimizer=optimizer, 
@@ -728,13 +602,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         device=device, 
         train_dataset=train_dataset, 
         val_dataset=val_dataset, 
-        criterion=criterion, 
         early_stopper=early_stopper, 
-        answer_encoder=answer_encoder,
-        max_length=max_length,
-        tokenizer=tokenizer,
-        feature_extractor=feature_extractor,
-        question_encoder=question_encoder,
         train_loss_ckp = train_loss_ckp,
         train_acc_ckp = train_acc_ckp,
         val_loss_ckp = val_loss_ckp,
@@ -753,12 +621,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     predictions, target = predict(
         model=model, 
         device=device,
-        dataset=test_dataset,
-        tokenizer=tokenizer, 
-        max_length=max_length,
-        question_encoder=question_encoder,
-        feature_extractor=feature_extractor,
-        answer_encoder=answer_encoder
+        dataset=test_dataset
     )
     
     test_acc = None
@@ -772,7 +635,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         
     fig, ax = plt.subplots(nrows=1, ncols=1)
         
-    cr = classification_report(y_true=y_true, y_pred=y_pred, target_names=answers, output_dict=True)
+    cr = classification_report(y_true=y_true, y_pred=y_pred, target_names=config.id2label.keys(), output_dict=True)
     
     test_acc = cr['macro avg']['f1-score']
     

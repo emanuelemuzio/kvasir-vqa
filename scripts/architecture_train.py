@@ -8,7 +8,7 @@ import os
 import torch
 import argparse
 from dotenv import load_dotenv
-from classifier.model import launch_experiment
+from architecture.model import launch_experiment
 from common.util import ROOT, get_run_info, update_best_runs, delete_other_runs, get_best_feature_extractor_info
 
 load_dotenv()
