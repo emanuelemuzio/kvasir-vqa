@@ -10,7 +10,7 @@ import seaborn as sns
 import json
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from common.util import ROOT, logger, generate_run_id, plot_run, multilabel_accuracy
+from common.util import ROOT, logger, generate_run_id, plot_run
 from common.earlystop import EarlyStopper
 from vilt.data import Dataset_, get_config
 from dotenv import load_dotenv
@@ -20,6 +20,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, Linea
 from sklearn.model_selection import train_test_split
 from matplotlib import pyplot as plt
 from transformers import ViltProcessor, ViltConfig, ViltForQuestionAnswering
+from sklearn.metrics import f1_score
 
 load_dotenv()      
 RANDOM_SEED = int(os.getenv('RANDOM_SEED'))
@@ -222,6 +223,8 @@ def train(
 
     for batch in train_dataset:
         
+        optimizer.zero_grad()
+        
         input_ids = [item for item in batch['input_ids']]
         pixel_values = [item for item in batch['pixel_values']]
         attention_mask = [item for item in batch['attention_mask']]
@@ -246,15 +249,22 @@ def train(
         loss.backward()
         optimizer.step() 
         
-        train_acc += multilabel_accuracy(output['logits'], data['labels'], threshold=0.5)
+        target = data['labels']
+        pred = torch.sigmoid(output['logits'])
+        pred[pred >= 0.5] = 1
+        pred[pred < 0.5] = 0
+        
+        target = target.cpu().detach().numpy()
+        pred = pred.cpu().detach().numpy()
+        acc = f1_score(target, pred, average='macro')
+        train_acc += acc
         train_loss += loss.item()
         
-        del(batch)
         if device == 'cuda':
             torch.cuda.empty_cache()
 
     train_loss = train_loss / len(train_dataset)
-    train_acc = train_acc / len(train_dataset)
+    train_acc =train_acc / len(train_dataset)
 
     return train_loss, train_acc
 
@@ -302,8 +312,8 @@ def val(
     # Evaluate the model on the validation set
     model.eval()
     val_loss = 0.0
-    val_acc = 0.0
-        
+    val_acc = 0.0 
+    
     with torch.no_grad():
         for batch in val_dataset:
         
@@ -328,9 +338,16 @@ def val(
             output = model(**data)
 
             loss = output.loss
+             
+            target = data['labels']
+            pred = torch.sigmoid(output['logits'])
+            pred[pred >= 0.5] = 1
+            pred[pred < 0.5] = 0
             
-            targets = torch.tensor([item for item in batch['target']]).to(device)
-            val_acc += multilabel_accuracy(output['logits'], targets)
+            target = target.cpu().detach().numpy()
+            pred = pred.cpu().detach().numpy()
+            acc = f1_score(target, pred, average='macro')
+            val_acc += acc
             val_loss += loss.item()
             
             del(batch)
@@ -341,7 +358,7 @@ def val(
         val_loss /= len(val_dataset)
 
         # Calculate validation accuracy
-        val_acc = val_acc / len(val_dataset) 
+        val_acc /= len(val_dataset)
         
         for s in scheduler:
             s.step(val_loss)
@@ -358,15 +375,15 @@ def predict(
     model.eval()
     
     predictions = []
-    target = []
+    targets = []
         
     with torch.no_grad():
-        for item in dataset:
-            input_ids = item['input_ids']
-            pixel_values = item['pixel_values']
-            attention_mask = item['attention_mask']
-            token_type_ids = item['token_type_ids']
-            labels = item['labels']
+        for batch in dataset:
+            input_ids = [item for item in batch['input_ids']]
+            pixel_values = [item for item in batch['pixel_values']]
+            attention_mask = [item for item in batch['attention_mask']]
+            token_type_ids = [item for item in batch['token_type_ids']]
+            labels = [item for item in batch['labels']]
             
             encoding = processor.image_processor.pad(pixel_values, return_tensors="pt").to(device)
             
@@ -382,7 +399,18 @@ def predict(
             
             output = model(**data)
 
-            targets = torch.tensor([item for item in batch['target']]).to(device)
+            loss = output.loss
+             
+            target = data['labels']
+            pred = torch.sigmoid(output['logits'])
+            pred[pred >= 0.5] = 1
+            pred[pred < 0.5] = 0
+            
+            target = target.cpu().detach().numpy()
+            pred = pred.cpu().detach().numpy()
+            
+            predictions.append(pred)
+            targets.append(target)
             
             del(batch)
             if device == 'cuda':
@@ -391,6 +419,8 @@ def predict(
     return predictions, target
     
 def launch_experiment(args : argparse.Namespace, device: str) -> None:
+    
+    device = 'cpu'
     
     processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-mlm")
     config = ViltConfig.from_dict(get_config())
@@ -631,20 +661,25 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
     model.load_state_dict(best_weights)
     
-    predictions, target = predict(
+    y_pred, y_true = predict(
         model=model, 
         device=device,
+        processor=processor,
         dataset=test_dataset
     )
     
-    test_acc = None
+    predictions_joined = [",".join(map(str, row)) for row in y_pred]
+    target_joined = [",".join(map(str, row)) for row in y_true]
     
-    y_true = []
-    y_pred = []
+    # Crea un DataFrame
+    results = pd.DataFrame({
+        "predictions": predictions_joined,
+        "targets": target_joined
+    })
     
-    for pred, t in zip(predictions, target):
-        y_pred.append(int(np.argmax(pred)))
-        y_true.append(t.item())
+    results.to_csv(f"{run_path}/test_results.csv", index=False)
+
+    test_acc = None 
         
     fig, ax = plt.subplots(nrows=1, ncols=1)
         

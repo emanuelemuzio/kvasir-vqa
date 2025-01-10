@@ -9,11 +9,12 @@ from dotenv import load_dotenv
 import torch
 from torchvision.transforms import v2
 import shutil
-from rouge import Rouge 
 from nltk.translate.bleu_score import sentence_bleu
 from nltk.translate import meteor
 from nltk import word_tokenize
-rouge = Rouge()
+import pandas as pd
+import evaluate
+rouge = evaluate.load('rouge')
 
 load_dotenv()
 
@@ -442,11 +443,11 @@ def get_best_feature_extractor_info():
             
     return best_config
 
-def calculate_rouge(candidate, reference):
+def calculate_rouge(candidates, references):
     '''
     candidate, reference: generated and ground-truth sentences
     '''
-    scores = rouge.get_scores([candidate], reference)
+    scores = rouge.compute(predictions=candidates, references=references)
     return scores
 
 def calculate_bleu(candidate, reference):
@@ -471,27 +472,37 @@ def init_kvasir_vocab():
     f = open(f"{ROOT}/{os.getenv('KVASIR_VQA_VOCABULARY')}")
     return json.load(f)
 
-def multilabel_accuracy(predictions, targets, threshold=0.5):
-    """
-    Calcola l'accuracy per classificazione multilabel.
+def generative_report(candidate_list, reference_list):
     
-    Args:
-        predictions (torch.Tensor): Tensor delle predizioni del modello, con shape (batch_size, num_classes).
-                                    Sono valori grezzi (logits) o probabilità.
-        targets (torch.Tensor): Tensor dei target reali, con shape (batch_size, num_classes).
-                                Contiene valori binari (0 o 1).
-        threshold (float): Soglia per classificare le predizioni in classi attive.
-
-    Returns:
-        float: Accuracy multilabel come frazione di predizioni corrette.
-    """
-    # Binarizza le predizioni usando la soglia
-    predicted_labels = (predictions > threshold).int()
+    bleu_score = calculate_bleu(candidate_list, reference_list)
+    rouge_scores = calculate_rouge(candidate_list, reference_list)
+    meteor_score = calculate_meteor(candidate_list, reference_list)
+    rouge1_score = rouge_scores['rouge1']
+    rouge2_score = rouge_scores['rouge2']
+    rougeL_score = rouge_scores['rougeL']
+    rougeLsum_score = rouge_scores['rougeLsum']
     
-    # Confronta le predizioni con i target
-    correct = (predicted_labels == targets).sum().item()
-    total = targets.numel()  # Numero totale di elementi (batch_size * num_classes)
+    metrics = [
+        'BLEU',
+        'METEOR',
+        'ROUGE-1',
+        'ROUGE-2',
+        'ROUGE-L',
+        'ROUGE-L SUM',
+    ]
     
-    return correct / total  
+    scores = [
+        bleu_score,
+        meteor_score,
+        rouge1_score,
+        rouge2_score,
+        rougeL_score,
+        rougeLsum_score
+    ]
+    
+    return pd.DataFrame({
+        "Metric" : metrics,
+        "Score" : scores
+    })
 
 logger = init_logger(logging)
