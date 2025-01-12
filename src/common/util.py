@@ -472,6 +472,36 @@ def init_kvasir_vocab():
     f = open(f"{ROOT}/{os.getenv('KVASIR_VQA_VOCABULARY')}")
     return json.load(f)
 
+def check_run_type(run_path : str) -> int:
+    
+    '''
+    <> args.run_id is not empty:
+        <> the run_id is valid and the folder exists:
+            <> the folder contains a checkpoint.pt file:
+                - the training continues -> 2
+            <> the folder doesnt contain a checkpoint.pt:
+                <> the folder contains a model.pt file:
+                    - only run tests -> 3
+                <> the folder doesnt contain neither checkpoint nor model:
+                    - delete folder, create new one for train and then tests -> 1
+        <> the run_id is invalid, the folder doesnt exist:
+            - create new folder for train and tests -> 1
+    <> args.run_id is empty:
+        - generate new id and create new folder -> 1
+    '''
+    
+    if os.path.exists(f"{run_path}"):
+        if os.path.exists(f"{run_path}/checkpoint.pt"):
+            return 2
+        else:
+            if os.path.exists(f"{run_path}/model.pt"):
+                return 3
+            else:
+                shutil.rmtree(run_path)
+                return 1
+    else:
+        return 1
+                
 def generative_report(candidate_list, reference_list):
     
     bleu_score = calculate_bleu(candidate_list, reference_list)

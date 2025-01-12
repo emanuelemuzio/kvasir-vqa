@@ -3,22 +3,18 @@ sys.path.append('src')
 
 import torch
 import os
-import numpy as np
 import pandas as pd
 import argparse
-import seaborn as sns
 import json
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from common.util import ROOT, logger, generate_run_id, plot_run
+from common.util import ROOT, logger, generate_run_id, plot_run, check_run_type
 from common.earlystop import EarlyStopper
 from vilt.data import Dataset_, get_config
 from dotenv import load_dotenv
-from sklearn.metrics import classification_report
 from torch import optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR, ExponentialLR, StepLR
 from sklearn.model_selection import train_test_split
-from matplotlib import pyplot as plt
 from transformers import ViltProcessor, ViltConfig, ViltForQuestionAnswering
 from sklearn.metrics import f1_score
 
@@ -41,63 +37,7 @@ def evaluate(
             val_loss_ckp = [],
             val_acc_ckp = [],
             start_epoch = 1,
-            run_id='test'):
-    
-    '''
-    Evaluation function for the classifier, which includes both 
-    the train step and the validation step for each epoch.
-    
-    ----------
-    Parameters
-        model: Classifier
-            Classifier model
-        num_epochs: int
-            max epochs for evaluation
-        batch_size: int
-            Numerical batch size
-        optimizer: torch optimizer
-            Torch optimizer (Adam, SGD, AdamW)
-        scheduler: torch scheduler/schedulers
-            either no scheduler or a list of (cosine annealing, linear, reduce lr on plateau)
-        device: str
-            'cuda' or 'pc'
-        train_dataset/val_dataset: torch Dataset
-            Dataset objects, used for creating torch DataLoaders
-        early_stopper: EarlyStopper
-            EarlyStopper object for interrupting evaluation early 
-        answer_encoder: LabelEncoder
-            LabelEncoder fitted on the answers contained in the metadata.csv
-        max_length: int
-            Max tokenizer length
-        tokenizer: AutoTokenizer    
-            HuggingFace AutoTokenizer
-        feature_extractor: 
-            Base Net used for the feature extraction
-        question_encoder: AutoModel
-            HuggingFace AutoModel for word embeddings
-        *_ckp: list
-            in case of interrupted evaluation (recovered from checkpoint), validation and 
-            training history will be passed as parameters
-        start_epoch: int
-            starting epoch (1 or N, depends on when last evaluation was interrupted)
-        run_id: str
-            Run identifier, the purpose is identifying the correct folder for storing data
-    ----------
-
-    ------
-    Return
-        train_loss: list
-            training loss history
-        train_acc: list
-            training accuracy history
-        val_loss: list
-            validation loss history
-        val_acc:
-            validation accuracy history
-        best_weights:
-            dict state of best epoch
-    ------
-    '''
+            run_id='test'): 
     
     logger.info('Starting model evaluation')
 
@@ -161,7 +101,7 @@ def evaluate(
                 'val_loss' : val_loss,
                 'val_acc' : val_acc,
                 'run_id' : run_id
-            }, f"{ROOT}/{os.getenv('VILT_CHECKPOINT')}") 
+            }, f"{ROOT}/{os.getenv('VILT_RUNS')/{run_id}}") 
 
             logger.info('Checkpoint reached')
             
@@ -361,7 +301,7 @@ def val(
         val_acc /= len(val_dataset)
         
         for s in scheduler:
-            s.step(val_loss)
+            s.step()
 
         return val_loss, val_acc 
     
@@ -379,48 +319,45 @@ def predict(
         
     with torch.no_grad():
         for batch in dataset:
-            input_ids = [item for item in batch['input_ids']]
-            pixel_values = [item for item in batch['pixel_values']]
-            attention_mask = [item for item in batch['attention_mask']]
-            token_type_ids = [item for item in batch['token_type_ids']]
-            labels = [item for item in batch['labels']]
+            input_ids = batch['input_ids'].unsqueeze(0)
+            pixel_values = batch['pixel_values'].unsqueeze(0)
+            attention_mask = batch['attention_mask'].unsqueeze(0)
+            token_type_ids = batch['token_type_ids'].unsqueeze(0)
+            labels = batch['labels'].unsqueeze(0)
             
             encoding = processor.image_processor.pad(pixel_values, return_tensors="pt").to(device)
             
             data = {}
-            data['input_ids'] = torch.stack(input_ids)
-            data['attention_mask'] = torch.stack(attention_mask)
-            data['token_type_ids'] = torch.stack(token_type_ids)
-            data['pixel_values'] = encoding['pixel_values']
+            data['input_ids'] = input_ids
+            data['attention_mask'] = attention_mask
+            data['token_type_ids'] = token_type_ids
+            data['pixel_values'] = pixel_values
             data['pixel_mask'] = encoding['pixel_mask']
-            data['labels'] = torch.stack(labels)
+            data['labels'] = labels
             
             data = {k:v.to(device) for k,v in data.items()}
             
             output = model(**data)
 
-            loss = output.loss
-             
             target = data['labels']
             pred = torch.sigmoid(output['logits'])
             pred[pred >= 0.5] = 1
             pred[pred < 0.5] = 0
             
-            target = target.cpu().detach().numpy()
-            pred = pred.cpu().detach().numpy()
+            target = target.squeeze().cpu().detach().tolist()
+            pred = pred.squeeze().cpu().detach().tolist()
             
             predictions.append(pred)
             targets.append(target)
             
             del(batch)
+            del(data)
             if device == 'cuda':
                 torch.cuda.empty_cache()
                 
-    return predictions, target
+    return predictions, targets
     
 def launch_experiment(args : argparse.Namespace, device: str) -> None:
-    
-    device = 'cpu'
     
     processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-mlm")
     config = ViltConfig.from_dict(get_config())
@@ -433,11 +370,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
     prompting = args.prompting == '1'
     use_aug = args.use_aug == '1'
-    
-    logger.info("Generating run id")
   
-    run_id = generate_run_id() 
-    
     df = None
     
     kvasir_vqa_datapath = f"{ROOT}/{os.getenv('KVASIR_VQA_DATA')}"
@@ -469,7 +402,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
 
     X_train, X_test, Y_train, Y_test = train_test_split(
         X, Y, 
-        test_size=0.4, 
+        test_size=0.3, 
         stratify=Y, 
         random_state=RANDOM_SEED, 
         shuffle=True
@@ -557,31 +490,6 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     patience = int(args.patience) or 5
     min_delta = float(args.min_delta) or 0.01
         
-    train_loss_ckp = None
-    train_acc_ckp = None
-    val_loss_ckp = None
-    val_acc_ckp = None
-    start_epoch = 1
-
-    run_path = None 
-    
-    if os.path.exists(f"{ROOT}/{os.getenv('VILT_CHECKPOINT')}"):
-        min_epochs = 0
-        checkpoint = torch.load(f"{ROOT}/{os.getenv('VILT_CHECKPOINT')}", weights_only=True)
-        model.load_state_dict(checkpoint['model_state_dict'])
-        start_epoch = checkpoint['num_epochs']
-        train_loss_ckp = checkpoint['train_loss']
-        train_acc_ckp = checkpoint['train_acc']
-        val_loss_ckp = checkpoint['val_loss']
-        val_acc_ckp = checkpoint['val_acc']
-        run_id = checkpoint['run_id']
-        run_path = f"{ROOT}/{os.getenv('VILT_RUNS')}/{run_id}"
-        logger.info(f'Loaded run {run_id} checkpoint')
-    else:
-        logger.info(f'New run: {run_id}')
-        run_path = f"{ROOT}/{os.getenv('VILT_RUNS')}/{run_id}"
-        os.mkdir(run_path)
-        
     # Define optimizer, scheduler and early stop
 
     optimizer = None
@@ -596,11 +504,14 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     min_epochs = int(args.min_epochs) or 0
         
     early_stopper = EarlyStopper(patience=patience, min_delta=min_delta, min_epochs=min_epochs)
+    
+    step_size = int(args.step_size) or None
+    gamma = float(args.gamma) or None
 
     scheduler = []
     
     scheduler_names = args.scheduler.split(',')
-
+    
     for name in scheduler_names:
         if name == 'plateau':
             scheduler.append(ReduceLROnPlateau(optimizer=optimizer, mode=mode))
@@ -609,53 +520,135 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         elif name == 'linear':
             scheduler.append(LinearLR(optimizer=optimizer))
         elif name == 'exponential':
-            scheduler.append(ExponentialLR(optimizer=optimizer, gamma=0.9, last_epoch=-1, verbose=False))
+            scheduler.append(ExponentialLR(optimizer=optimizer, gamma=gamma, last_epoch=-1, verbose=False))
         elif name == 'step':
-            scheduler.append(StepLR(optimizer, step_size=15, gamma=0.1))
-
-    test_run = args.test_run or None
+            scheduler.append(StepLR(optimizer, step_size=step_size, gamma=gamma))
     
+    '''
+    1: Generate new run_id and run folder
+    2: Recover from existing checkpoint, finish training and run tests
+    3: Use existing run_id, the run folder contains only the model.pt file, run tests for it
+    '''
+    
+    run_type = None
+    run_id = None
+    delete_ckp = args.delete_ckp == "1"
+    
+    '''
+    <> args.run_id is not empty:
+        <> the run_id is valid and the folder exists:
+            <> the folder contains a checkpoint.pt file:
+                - the training continues -> 2
+            <> the folder doesnt contain a checkpoint.pt:
+                <> the folder contains a model.pt file:
+                    - only run tests -> 3
+                <> the folder doesnt contain neither checkpoint nor model:
+                    - delete folder, create new one for train and then tests -> 1
+        <> the run_id is invalid, the folder doesnt exist:
+            - create new folder for train and tests -> 1
+    <> args.run_id is empty:
+        - generate new id and create new folder -> 1
+    '''
+    
+    if args.run_id is not None:
+        if delete_ckp:
+            if os.path.exists(f"{ROOT}/{os.getenv('VILT_RUNS')}/{args.run_id}"):
+                os.remove(f"{ROOT}/{os.getenv('VILT_RUNS')}/{args.run_id}") 
+        run_type = check_run_type(f"{ROOT}/{os.getenv('VILT_RUNS')}/{args.run_id}")
+        if run_type != 1:
+            run_id = args.run_id
+        else:
+            logger.info("Generating run id")
+            run_id = generate_run_id()
+    else:
+        run_type = 1
+                
     train_loss = None
     train_acc = None
     val_loss = None
     val_acc = None
-    best_weights = None
+    train_loss_ckp = None
+    train_acc_ckp = None
+    val_loss_ckp = None
+    val_acc_ckp = None
+    start_epoch = 1
+    best_weights = None     
+
+    run_path = f"{ROOT}/{os.getenv('VILT_RUNS')}/{run_id}"
     
-    if test_run is not None:
-        run_id = test_run
-        run_path = f"{ROOT}/{os.getenv('VILT_RUNS')}/{run_id}"
-        run = torch.load(f"{run_path}/model.pt", weights_only=True)
-        best_weights = run['model_state_dict']
-        train_loss = run['train_loss']
-        train_acc = run['train_acc']
-        val_loss = run['val_loss']
-        val_acc = run['val_acc']
-        logger.info(f'Loaded data for testing run {run_id}')
-    else:
+    match run_type:
+        case 1:
+            logger.info(f'New run: {run_id}')
+            os.mkdir(run_path)
     
-        logger.info('Starting model evaluation')
-    
-        train_loss, train_acc, val_loss, val_acc, best_weights = evaluate(
-            model=model, 
-            processor=processor,
-            num_epochs=num_epochs, 
-            batch_size=batch_size,
-            optimizer=optimizer, 
-            scheduler=scheduler,
-            device=device, 
-            train_dataset=train_dataset, 
-            val_dataset=val_dataset, 
-            early_stopper=early_stopper, 
-            train_loss_ckp = train_loss_ckp,
-            train_acc_ckp = train_acc_ckp,
-            val_loss_ckp = val_loss_ckp,
-            val_acc_ckp = val_acc_ckp,
-            start_epoch = start_epoch,
-            run_id=run_id)
+            logger.info('Starting model evaluation')
         
-        logger.info(f'Evaluation ended in {len(train_loss)} epochs')
+            train_loss, train_acc, val_loss, val_acc, best_weights = evaluate(
+                model=model, 
+                processor=processor,
+                num_epochs=num_epochs, 
+                batch_size=batch_size,
+                optimizer=optimizer, 
+                scheduler=scheduler,
+                device=device, 
+                train_dataset=train_dataset, 
+                val_dataset=val_dataset, 
+                early_stopper=early_stopper, 
+                train_loss_ckp = train_loss_ckp,
+                train_acc_ckp = train_acc_ckp,
+                val_loss_ckp = val_loss_ckp,
+                val_acc_ckp = val_acc_ckp,
+                start_epoch = start_epoch,
+                run_id=run_id)
+                
+            logger.info(f'Evaluation ended in {len(train_loss)} epochs')
+                
+            torch.save(best_weights, f"{run_path}/model.pt")
+            
+        case 2:
+            min_epochs = 0
+            checkpoint = torch.load(f"{ROOT}/{os.getenv('VILT_RUNS')}/{run_id}/checkpoint.pt", weights_only=False)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            start_epoch = checkpoint['num_epochs']
+            train_loss_ckp = checkpoint['train_loss']
+            train_acc_ckp = checkpoint['train_acc']
+            val_loss_ckp = checkpoint['val_loss']
+            val_acc_ckp = checkpoint['val_acc']
+            run_id = checkpoint['run_id']
+            run_path = f"{ROOT}/{os.getenv('VILT_RUNS')}/{run_id}"
+            logger.info(f'Loaded run {run_id} checkpoint')
+                
+            logger.info('Starting model evaluation')
         
-        torch.save(best_weights, f"{run_path}/model.pt")
+            train_loss, train_acc, val_loss, val_acc, best_weights = evaluate(
+                model=model, 
+                processor=processor,
+                num_epochs=num_epochs, 
+                batch_size=batch_size,
+                optimizer=optimizer, 
+                scheduler=scheduler,
+                device=device, 
+                train_dataset=train_dataset, 
+                val_dataset=val_dataset, 
+                early_stopper=early_stopper, 
+                train_loss_ckp = train_loss_ckp,
+                train_acc_ckp = train_acc_ckp,
+                val_loss_ckp = val_loss_ckp,
+                val_acc_ckp = val_acc_ckp,
+                start_epoch = start_epoch,
+                run_id=run_id)
+                
+            logger.info(f'Evaluation ended in {len(train_loss)} epochs')
+                
+            torch.save(best_weights, f"{run_path}/model.pt")
+            
+        case 3:
+    
+            val_acc = checkpoint['val_acc']
+            val_loss = checkpoint['val_loss']
+            train_acc = checkpoint['train_acc']
+            train_loss = checkpoint['train_loss']
+            best_weights = torch.load(f"{run_path}/model.pt", weights_only=True) 
         
     logger.info(f'Starting test phase')
     
@@ -668,37 +661,15 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         dataset=test_dataset
     )
     
-    predictions_joined = [",".join(map(str, row)) for row in y_pred]
-    target_joined = [",".join(map(str, row)) for row in y_true]
+    f1_scoring = f1_score(y_true, y_pred, average=None).tolist()
+    f1_macro_score = f1_score(y_true, y_pred, average='macro')
     
-    # Crea un DataFrame
-    results = pd.DataFrame({
-        "predictions": predictions_joined,
-        "targets": target_joined
-    })
+    columns = list(config.id2label.values())
     
-    results.to_csv(f"{run_path}/test_results.csv", index=False)
-
-    test_acc = None 
-        
-    fig, ax = plt.subplots(nrows=1, ncols=1)
-        
-    cr = classification_report(y_true=y_true, y_pred=y_pred, target_names=config.id2label.keys(), output_dict=True)
-    
-    test_acc = cr['macro avg']['f1-score']
-    
-    cr = pd.DataFrame(cr).iloc[:-1, :].T
-    
-    cr.to_csv(f"{run_path}/cr.csv")
+    pd.DataFrame({'Class': columns, 'F1-Score': f1_scoring}).to_csv(f"{run_path}/test_results.csv", index=False)
     
     logger.info("Saved test report")
     
-    sns.heatmap(cr, annot=True, ax=ax).get_figure()
-    
-    fig.savefig(f"{run_path}/cr.png")
-    
-    plt.close()
-
     with open(f"{run_path}/run.json", "w") as f:
         config = vars(args)
         config['train_loss'] = train_loss
@@ -706,10 +677,10 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         config['train_acc'] = train_acc
         config['val_acc'] = val_acc
         config['run_id'] = run_id
-        config['test_acc'] = test_acc
+        config['test_acc'] = f1_macro_score
         json.dump(config, f)
 
-    os.remove(f"{ROOT}/{os.getenv('VILT_CHECKPOINT')}") 
+    os.remove(f"{run_path}/checkpoint.pt") 
 
     plot_run(base_path=f"{ROOT}/{os.getenv('VILT_RUNS')}", run_id=run_id)
     
