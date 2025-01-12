@@ -475,17 +475,16 @@ def init_kvasir_vocab():
 def check_run_type(run_path : str) -> int:
     
     '''
-    <> args.run_id is not empty:
-        <> the run_id is valid and the folder exists:
-            <> the folder contains a checkpoint.pt file:
-                - the training continues -> 2
-            <> the folder doesnt contain a checkpoint.pt:
-                <> the folder contains a model.pt file:
-                    - only run tests -> 3
-                <> the folder doesnt contain neither checkpoint nor model:
-                    - delete folder, create new one for train and then tests -> 1
-        <> the run_id is invalid, the folder doesnt exist:
-            - create new folder for train and tests -> 1
+    <> args.run_id is not empty and the folder exists:
+        <> the folder contains a checkpoint.pt file:
+            - the training continues -> 2
+        <> the folder doesnt contain a checkpoint.pt:
+            <> the folder contains a model.pt file:
+                - only run tests -> 3
+            <> the folder doesnt contain neither checkpoint nor model:
+                - delete folder, create new one for train and then tests -> 1
+    <> the run_id is invalid, the folder doesnt exist:
+        - create new folder for train and tests -> 1
     <> args.run_id is empty:
         - generate new id and create new folder -> 1
     '''

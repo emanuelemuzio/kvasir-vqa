@@ -34,19 +34,15 @@ if __name__ == '__main__':
     parser.add_argument('--scheduler', help="'cosine', 'plateau' or 'linear'")
     parser.add_argument('--optimizer', help="'sgd', 'adam' or 'adamw")
     parser.add_argument('--weight_decay', help="")
+    parser.add_argument('--step_size', help="StepLR parameter")
+    parser.add_argument('--gamma', help="LR reduction parameter for StepLR and LinearLR")
     parser.add_argument('--prompting', help="'1' for prompt aided question, else '0'")
     parser.add_argument('--delete_ckp', help="If equals '1', the existing checkpoint will be deleted")
     parser.add_argument('--min_epochs', help='')
     parser.add_argument('--use_aug', help="'1' to use augmented data (important for data balance of kvasirvqa dataset)")
-    parser.add_argument('--test_run', help="Will only test using the weights obtained after completing the run with that ID")
+    parser.add_argument('--run_id', help="Continue the training if checkpoint.pt is present in the run folder, else just run the tests for it")
 
-    args = parser.parse_args()
-    
-    delete_ckp = args.delete_ckp == "1"
-    
-    if delete_ckp:
-        if os.path.exists(os.getenv('BLIP_CHECKPOINT')):
-            os.remove(os.getenv('BLIP_CHECKPOINT'))        
+    args = parser.parse_args()       
         
     launch_experiment(args=args, device=device)
     

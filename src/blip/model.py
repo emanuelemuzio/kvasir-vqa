@@ -8,7 +8,7 @@ import argparse
 import json
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from common.util import ROOT, logger, generate_run_id, generative_report
+from common.util import ROOT, logger, generate_run_id, generative_report, check_run_type
 from common.earlystop import EarlyStopper
 from blip.data import Dataset_
 from dotenv import load_dotenv
@@ -293,8 +293,6 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
     logger.info("Generating run id")
   
-    run_id = generate_run_id() 
-    
     df = None
     
     kvasir_vqa_datapath = f"{ROOT}/{os.getenv('KVASIR_VQA_DATA')}"
@@ -413,28 +411,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
 
     patience = int(args.patience) or 5
     min_delta = float(args.min_delta) or 0.01
-        
-    train_loss_ckp = None
-    val_loss_ckp = None
-    start_epoch = 1
-
-    run_path = None 
-    
-    if os.path.exists(f"{ROOT}/{os.getenv('BLIP_CHECKPOINT')}"):
-        min_epochs = 0
-        checkpoint = torch.load(f"{ROOT}/{os.getenv('BLIP_CHECKPOINT')}", weights_only=True)
-        model.load_state_dict(checkpoint['model_state_dict'])
-        start_epoch = checkpoint['num_epochs']
-        train_loss_ckp = checkpoint['train_loss']
-        val_loss_ckp = checkpoint['val_loss']
-        run_id = checkpoint['run_id']
-        run_path = f"{ROOT}/{os.getenv('BLIP_RUNS')}/{run_id}"
-        logger.info(f'Loaded run {run_id} checkpoint')
-    else:
-        logger.info(f'New run: {run_id}')
-        run_path = f"{ROOT}/{os.getenv('BLIP_RUNS')}/{run_id}"
-        os.mkdir(run_path)
-        
+                
     # Define optimizer, scheduler and early stop
 
     optimizer = None
@@ -454,6 +431,9 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
     scheduler_names = args.scheduler.split(',')
 
+    step_size = int(args.step_size) or None
+    gamma = float(args.gamma) or None
+
     for name in scheduler_names:
         if name == 'plateau':
             scheduler.append(ReduceLROnPlateau(optimizer=optimizer, mode=mode))
@@ -462,50 +442,123 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         elif name == 'linear':
             scheduler.append(LinearLR(optimizer=optimizer))
         elif name == 'exponential':
-            scheduler.append(ExponentialLR(optimizer=optimizer, gamma=0.9, last_epoch=-1, verbose=False))
+            scheduler.append(ExponentialLR(optimizer=optimizer, gamma=gamma, last_epoch=-1, verbose=False))
         elif name == 'step':
-            scheduler.append(StepLR(optimizer, step_size=15, gamma=0.1))
+            scheduler.append(StepLR(optimizer, step_size=step_size, gamma=gamma))
 
-    test_run = args.test_run or None
+    '''
+    1: Generate new run_id and run folder
+    2: Recover from existing checkpoint, finish training and run tests
+    3: Use existing run_id, the run folder contains only the model.pt file, run tests for it
+    '''
     
-    scaler = torch.amp.GradScaler()
+    run_type = None
+    run_id = None
+    delete_ckp = args.delete_ckp == "1"
     
+    '''
+    <> args.run_id is not empty:
+        <> the run_id is valid and the folder exists:
+            <> the folder contains a checkpoint.pt file:
+                - the training continues -> 2
+            <> the folder doesnt contain a checkpoint.pt:
+                <> the folder contains a model.pt file:
+                    - only run tests -> 3
+                <> the folder doesnt contain neither checkpoint nor model:
+                    - delete folder, create new one for train and then tests -> 1
+        <> the run_id is invalid, the folder doesnt exist:
+            - create new folder for train and tests -> 1
+    <> args.run_id is empty:
+        - generate new id and create new folder -> 1
+    '''
+    
+    if args.run_id is not None:
+        if delete_ckp:
+            if os.path.exists(f"{ROOT}/{os.getenv('BLIP_RUNS')}/{args.run_id}"):
+                os.remove(f"{ROOT}/{os.getenv('BLIP_RUNS')}/{args.run_id}") 
+        run_type = check_run_type(f"{ROOT}/{os.getenv('BLIP_RUNS')}/{args.run_id}")
+        if run_type != 1:
+            run_id = args.run_id
+        else:
+            logger.info("Generating run id")
+            run_id = generate_run_id()
+    else:
+        run_type = 1
+                
     train_loss = None
     val_loss = None
-    best_weights = None
+    train_loss_ckp = None
+    val_loss_ckp = None
+    start_epoch = 1
+    best_weights = None     
+
+    run_path = f"{ROOT}/{os.getenv('BLIP_RUNS')}/{run_id}"
     
-    if test_run is not None:
-        run_id = test_run
-        run_path = f"{ROOT}/{os.getenv('BLIP_RUNS')}/{run_id}"
-        run = torch.load(f"{run_path}/model.pt", weights_only=True)
-        best_weights = run['model_state_dict']
-        train_loss = run['train_loss']
-        val_loss = run['val_loss']
-        logger.info(f'Loaded data for testing run {run_id}')
-    else:
+    match run_type:
+        case 1:
+            logger.info(f'New run: {run_id}')
+            os.mkdir(run_path)
     
-        logger.info('Starting model evaluation')
-    
-        train_loss, val_loss, best_weights = evaluate(
-            model=model, 
-            processor=processor,
-            num_epochs=num_epochs, 
-            batch_size=batch_size,
-            optimizer=optimizer, 
-            scheduler=scheduler,
-            device=device, 
-            scaler=scaler,
-            train_dataset=train_dataset, 
-            val_dataset=val_dataset, 
-            early_stopper=early_stopper, 
-            train_loss_ckp = train_loss_ckp,
-            val_loss_ckp = val_loss_ckp,
-            start_epoch = start_epoch,
-            run_id=run_id)
+            logger.info('Starting model evaluation')
         
-        logger.info(f'Evaluation ended in {len(train_loss)} epochs')
+            train_loss, val_loss, best_weights = evaluate(
+                model=model, 
+                processor=processor,
+                num_epochs=num_epochs, 
+                batch_size=batch_size,
+                optimizer=optimizer, 
+                scheduler=scheduler,
+                device=device, 
+                train_dataset=train_dataset, 
+                val_dataset=val_dataset, 
+                early_stopper=early_stopper, 
+                train_loss_ckp = train_loss_ckp,
+                val_loss_ckp = val_loss_ckp,
+                start_epoch = start_epoch,
+                run_id=run_id)
+                
+            logger.info(f'Evaluation ended in {len(train_loss)} epochs')
+                
+            torch.save(best_weights, f"{run_path}/model.pt")
+            
+        case 2:
+            min_epochs = 0
+            checkpoint = torch.load(f"{ROOT}/{os.getenv('BLIP_RUNS')}/{run_id}/checkpoint.pt", weights_only=False)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            start_epoch = checkpoint['num_epochs']
+            train_loss_ckp = checkpoint['train_loss']
+            val_loss_ckp = checkpoint['val_loss']
+            run_id = checkpoint['run_id']
+            run_path = f"{ROOT}/{os.getenv('BLIP_RUNS')}/{run_id}"
+            logger.info(f'Loaded run {run_id} checkpoint')
+                
+            logger.info('Starting model evaluation')
         
-        torch.save(best_weights, f"{run_path}/model.pt")
+            train_loss, val_loss, best_weights = evaluate(
+                model=model, 
+                processor=processor,
+                num_epochs=num_epochs, 
+                batch_size=batch_size,
+                optimizer=optimizer, 
+                scheduler=scheduler,
+                device=device, 
+                train_dataset=train_dataset, 
+                val_dataset=val_dataset, 
+                early_stopper=early_stopper, 
+                train_loss_ckp = train_loss_ckp,
+                val_loss_ckp = val_loss_ckp,
+                start_epoch = start_epoch,
+                run_id=run_id)
+                
+            logger.info(f'Evaluation ended in {len(train_loss)} epochs')
+                
+            torch.save(best_weights, f"{run_path}/model.pt")
+            
+        case 3:
+    
+            val_loss = checkpoint['val_loss']
+            train_loss = checkpoint['train_loss']
+            best_weights = torch.load(f"{run_path}/model.pt", weights_only=True) 
         
     logger.info(f'Starting test phase')
     
