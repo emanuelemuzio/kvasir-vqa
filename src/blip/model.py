@@ -146,7 +146,7 @@ def train(
 
     train_loss = 0.0
 
-    for idx, batch in zip(tqdm(range(len(train_dataset)), desc='Training batch: ...'), train_dataset):
+    for idx, batch in zip(range(len(train_dataset)), train_dataset):
         
         input_ids = batch.pop('input_ids').to(device)
         pixel_values = batch.pop('pixel_values').to(device)
@@ -156,7 +156,7 @@ def train(
         with torch.amp.autocast(device_type='cuda', dtype=torch.float16):
             outputs = model(input_ids=input_ids,
                         pixel_values=pixel_values,
-                        # attention_mask=attention_masked,
+                        attention_mask=attention_masked,
                         labels=labels)
             
         loss = outputs.loss
@@ -164,11 +164,11 @@ def train(
         # loss.backward()
         # optimizer.step()
         optimizer.zero_grad()
-        
+            
         scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
-        
+            
         del(batch)
         if device == 'cuda':
             torch.cuda.empty_cache()
@@ -233,12 +233,12 @@ def val(
                             attention_mask=attention_masked,
                             labels=labels)
                 
-                loss = outputs.loss
-                val_loss += loss.item()
+            loss = outputs.loss
+            val_loss += loss.item()
             
-                del(batch)
-                if device == 'cuda':
-                    torch.cuda.empty_cache()
+            del(batch)
+            if device == 'cuda':
+                torch.cuda.empty_cache()
 
         # Calculate validation loss
         val_loss /= len(val_dataset)
@@ -262,17 +262,19 @@ def predict(
     with torch.no_grad():
         for item in dataset:
             
-            input_ids = batch['input_ids'].to(device)
-            pixel_values = batch['pixel_values'].to(device)
-            attention_masked = batch['attention_mask'].to(device)
-            labels = batch['labels'].to(device)
+            input_ids = item['input_ids'].to(device)
+            pixel_values = item['pixel_values'].to(device)
+            attention_masked = item['attention_mask'].to(device)
+            labels = item['labels'].to(device)
 
-            outputs = model(
+            outputs = model.generate(
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 attention_mask=attention_masked,
                 labels=labels
             )
+            
+            generated_text = dataset.processor.decode(outputs[0], skip_special_tokens=True)
                 
             del(batch)
             if device == 'cuda':
@@ -355,7 +357,6 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         base_path=kvasir_vqa_datapath,
         aug_path=kvasir_vqa_datapath_aug,
         processor=processor,
-        config=config
     )
         
     test_dataset = Dataset_(
@@ -366,7 +367,6 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         base_path=kvasir_vqa_datapath,
         aug_path=kvasir_vqa_datapath_aug,
         processor=processor,
-        config=config
     )
     
     val_dataset = Dataset_(
@@ -377,7 +377,6 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         base_path=kvasir_vqa_datapath,
         aug_path=kvasir_vqa_datapath_aug,
         processor=processor,
-        config=config
     )
     
     if prompting: 
@@ -411,6 +410,8 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
 
     patience = int(args.patience) or 5
     min_delta = float(args.min_delta) or 0.01
+    
+    scaler = torch.amp.GradScaler(device)
                 
     # Define optimizer, scheduler and early stop
 
@@ -472,10 +473,10 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         - generate new id and create new folder -> 1
     '''
     
-    if args.run_id is not None:
+    if len(args.run_id) > 0:
         if delete_ckp:
-            if os.path.exists(f"{ROOT}/{os.getenv('BLIP_RUNS')}/{args.run_id}"):
-                os.remove(f"{ROOT}/{os.getenv('BLIP_RUNS')}/{args.run_id}") 
+            if os.path.exists(f"{ROOT}/{os.getenv('BLIP_RUNS')}/{args.run_id}/checkpoint.pt"):
+                os.remove(f"{ROOT}/{os.getenv('BLIP_RUNS')}/{args.run_id}/checkpoint.pt") 
         run_type = check_run_type(f"{ROOT}/{os.getenv('BLIP_RUNS')}/{args.run_id}")
         if run_type != 1:
             run_id = args.run_id
@@ -483,6 +484,8 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
             logger.info("Generating run id")
             run_id = generate_run_id()
     else:
+        logger.info("Generating run id")
+        run_id = generate_run_id()
         run_type = 1
                 
     train_loss = None
@@ -500,15 +503,15 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
             os.mkdir(run_path)
     
             logger.info('Starting model evaluation')
-        
+            
             train_loss, val_loss, best_weights = evaluate(
                 model=model, 
-                processor=processor,
                 num_epochs=num_epochs, 
                 batch_size=batch_size,
                 optimizer=optimizer, 
                 scheduler=scheduler,
                 device=device, 
+                scaler=scaler,
                 train_dataset=train_dataset, 
                 val_dataset=val_dataset, 
                 early_stopper=early_stopper, 
@@ -535,13 +538,13 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
             logger.info('Starting model evaluation')
         
             train_loss, val_loss, best_weights = evaluate(
-                model=model, 
-                processor=processor,
+               model=model, 
                 num_epochs=num_epochs, 
                 batch_size=batch_size,
                 optimizer=optimizer, 
                 scheduler=scheduler,
                 device=device, 
+                scaler=scaler,
                 train_dataset=train_dataset, 
                 val_dataset=val_dataset, 
                 early_stopper=early_stopper, 
