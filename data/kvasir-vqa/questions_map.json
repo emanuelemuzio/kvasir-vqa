@@ -1,0 +1,148 @@
+{
+      "Are there any abnormalities in the image? Check all that are present.": [
+            "oesophagitis",
+            "barretts",
+            "ulcerative colitis",
+            "polyp",
+            "short-segment barretts",
+            "hemorrhoids"
+      ],
+      "Are there any anatomical landmarks in the image? Check all that are present.": [
+            "none",
+            "z-line",
+            "ileum",
+            "cecum",
+            "pylorus"
+      ],
+      "Are there any instruments in the image? Check all that are present.": [
+            "injection needle",
+            "none",
+            "biopsy forceps",
+            "polyp snare",
+            "tube",
+            "metal clip"
+      ],
+      "Does this image contain any finding?": [
+            "no"
+      ],
+      "Have all polyps been removed?": [
+            "not relevant",
+            "no",
+            "yes"
+      ],
+      "How many findings are present?": [
+            "5",
+            "3",
+            "4",
+            "1",
+            "16",
+            "6",
+            "2"
+      ],
+      "How many instruments are in the image?": [
+            "3",
+            "1",
+            "2",
+            "0"
+      ],
+      "How many polyps are in the image?": [
+            "5",
+            "3",
+            "4",
+            "1",
+            "16",
+            "0",
+            "6",
+            "2"
+      ],
+      "Is there a green/black box artefact?": [
+            "no",
+            "yes"
+      ],
+      "Is there text?": [
+            "no",
+            "yes"
+      ],
+      "Is this finding easy to detect?": [
+            "no",
+            "yes",
+            "not relevant"
+      ],
+      "What color is the abnormality? If more than one separate with ;": [
+            "pink",
+            "black",
+            "blue",
+            "flesh",
+            "orange",
+            "yellow",
+            "none",
+            "purple",
+            "white",
+            "green",
+            "brown",
+            "red",
+            "grey"
+      ],
+      "What color is the anatomical landmark? If more than one separate with ;": [
+            "pink",
+            "yellow",
+            "white",
+            "brown",
+            "red",
+            "grey"
+      ],
+      "What is the size of the polyp?": [
+            "5-10mm",
+            ">20mm",
+            "11-20mm",
+            "<5mm",
+            "none"
+      ],
+      "What type of polyp is present?": [
+            "paris is",
+            "none",
+            "paris iia",
+            "paris ip"
+      ],
+      "What type of procedure is the image taken from?": [
+            "colonoscopy",
+            "gastroscopy",
+            "capsule endoscopy"
+      ],
+      "Where in the image is the abnormality?": [
+            "center-left",
+            "lower-left",
+            "none",
+            "upper-center",
+            "center-right",
+            "lower-center",
+            "upper-left",
+            "upper-right",
+            "center",
+            "lower-right"
+      ],
+      "Where in the image is the anatomical landmark?": [
+            "center-left",
+            "lower-left",
+            "none",
+            "upper-center",
+            "center-right",
+            "upper-left",
+            "lower-center",
+            "upper-right",
+            "center",
+            "lower-right"
+      ],
+      "Where in the image is the instrument?": [
+            "center",
+            "center-left",
+            "lower-left",
+            "none",
+            "upper-center",
+            "center-right",
+            "lower-center",
+            "upper-right",
+            "upper-left",
+            "lower-right"
+      ]
+}

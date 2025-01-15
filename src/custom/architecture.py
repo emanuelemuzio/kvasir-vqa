@@ -4,7 +4,7 @@ sys.path.append('src')
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from common.prompt_tuning import PromptTuning
+from common.prompting import PromptTuning
 
 class HadamardClassifier(nn.Module):
     

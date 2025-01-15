@@ -8,7 +8,7 @@ import random
 from dotenv import load_dotenv
 import torch
 from common.util import logger, ROOT, image_transform
-from common.prompt_tuning import PromptTuning
+from common.prompting import PromptTuning
 import pandas as pd
 from PIL import Image
 from random import randint as rand

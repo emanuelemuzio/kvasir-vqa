@@ -48,24 +48,14 @@ class Dataset_(Dataset):
     ------
     '''
     
-    def __init__(self, source=[], question=[], answer=[], img_id=[],  base_path='', aug_path='', processor=None):  
+    def __init__(self, source=[], question=[], answer=[], img_id=[],  base_path='', processor=None):  
         
         self.source = source
         self.question = question
         self.answer = answer
         self.img_id = img_id
-        self.base_path = base_path
-        self.aug_path = aug_path
-        self.prompt = []
-        self.transform = v2.Compose([
-            v2.Resize((384, 640)),  
-            v2.ToTensor(),          
-        ])
-        self.use_prompt = len(self.prompt) > 0 
-        self.processor = processor
-        
-    def add_prompts(self, prompt=[]):
-        self.prompt = prompt
+        self.base_path = base_path 
+        self.processor = processor 
     
     def __len__(self):
         return len(self.source)
@@ -75,30 +65,20 @@ class Dataset_(Dataset):
         question = self.question[idx]
         answer = self.answer[idx]
         img_id = self.img_id[idx]
-        use_prompt = self.use_prompt
-        
-        if use_prompt:
-            question += self.prompt[idx]
         
         full_path = f"{self.aug_path}/{img_id}.jpg" if 'aug' in img_id else f"{self.base_path}/{img_id}.jpg" 
-        img = self.transform(read_image(full_path))
+        img = read_image(full_path)
 
         encoding = self.processor(
             img, 
             question, 
-            padding="max_length", 
-            truncation=True, 
             return_tensors="pt"
         )
         
-        labels = self.processor.tokenizer.encode(
-            answer, max_length= 8, 
-            pad_to_max_length=True, 
-            return_tensors='pt'
-        )
+        item = {
+            'encoding' : encoding,
+            'answer' : answer,
+            'question' : question
+        }
         
-        encoding["labels"] = labels
-        # remove batch dimension
-        for k,v in encoding.items():  
-            encoding[k] = v.squeeze()
-        return encoding
+        return item

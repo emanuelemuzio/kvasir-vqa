@@ -13,7 +13,7 @@ from transformers import AutoTokenizer, AutoModel
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from common.util import ROOT, logger, get_run_info, generate_run_id, plot_run
-from common.prompt_tuning import PromptTuning
+from common.prompting import PromptTuning
 from torcheval.metrics.functional import multiclass_accuracy
 from common.earlystop import EarlyStopper
 from custom import HadamardClassifier, ConcatClassifier, ConvVQA, BiggerConvVQA

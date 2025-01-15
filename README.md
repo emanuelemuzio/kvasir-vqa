@@ -26,10 +26,6 @@ La struttura del progetto è la seguente:
 
 |----```metadata.csv``` _file di metadati relativo al KvasirVQA_
 
-|----```prompt_metadata_aug.csv``` _contiene il testo generato dal prompt tuning sui dati aumentati_
-
-|----```prompt_metadata.csv``` _contiene il testo generato dal prompt tuning sui dati standard_
-
 |--```feature_extractor_aug.csv``` _file di mapping con DA per addestramento del FE_
 
 |--```feature_extractor_classes.json``` _file contenente il mapping delle classi per il FE_
@@ -50,8 +46,6 @@ La struttura del progetto è la seguente:
 
 |----```feature_extractor.py``` _script da lanciare per il pre addestramento del FE_
 
-|----```generate_prompts.py``` _script per la generazione dei prompt al fine di sperimentare il prompt tuning_
-
 |----```retrieve_kvasir_vqa.py``` _script per il recupero dei dati relativi al KvasirVQA_
 
 |--```src``` _sorgenti e implementazioni, definizioni di dataset e funzioni di utility_
@@ -61,8 +55,6 @@ La struttura del progetto è la seguente:
 |--```kvasir_vqa.ipynb``` _Notebook contenente analisi dei dati sul KvasirVQA_
 
 |--```feature_extractor.ipynb``` _Notebook contenente analisi dei dati per il FE_
-
-|--```Modelfile``` _File con specifiche dell'LLM per il prompting_
 
 ## Requisiti
 

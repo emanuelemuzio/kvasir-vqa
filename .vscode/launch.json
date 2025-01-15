@@ -70,25 +70,19 @@
             "args": [
                 "--model=blip",
                 "--turnoff=-1",
-                "--num_epochs=100",
-                "--batch_size=4",
-                "--lr=0.00004",
-                "--momentum=0.9",
-                "--T_max=100",
-                "--eta_min=0.001",
-                "--patience=5",
-                "--min_delta=0.005",
-                "--scheduler=step",
-                "--optimizer=adamw",
-                "--mode=min",
-                "--weight_decay=0.01",
-                "--step_size=4",
-                "--gamma=0.01",
-                "--prompting=0",
-                "--delete_ckp=0",
-                "--min_epochs=20",
-                "--use_aug=1",
-                "--run_id="
+                "--prompting=template-1"
+            ]
+        },
+        {
+            "name": "GIT",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "--model=git",
+                "--turnoff=-1",
+                "--prompting=template-1"
             ]
         },
         {
@@ -107,18 +101,30 @@
                 "--T_max=100",
                 "--eta_min=0.001",
                 "--patience=5",
-                "--min_delta=0.005",
-                "--scheduler=step",
+                "--min_delta=0.001",
+                "--scheduler=exponential",
                 "--optimizer=adamw",
                 "--mode=min",
                 "--weight_decay=0.01",
-                "--step_size=4",
-                "--gamma=0.01",
+                "--step_size=10",
+                "--gamma=0.00001",
                 "--prompting=0",
                 "--delete_ckp=1",
                 "--min_epochs=20",
                 "--use_aug=1",
-                "--run_id="
+                "--run_id=",
+                "--model_mode=multilabel"
+            ]
+        },
+        {
+            "name": "Sunburst",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "-read=./data/kvasir-vqa/questions.txt",
+                "-adjust_ratio=0.4"
             ]
         }
     ]

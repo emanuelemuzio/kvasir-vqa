@@ -472,6 +472,10 @@ def init_kvasir_vocab():
     f = open(f"{ROOT}/{os.getenv('KVASIR_VQA_VOCABULARY')}")
     return json.load(f)
 
+def init_kvasir_vocab_multilabel():
+    f = open(f"{ROOT}/{os.getenv('KVASIR_VQA_VOCABULARY_MULTILABEL')}")
+    return json.load(f)
+
 def check_run_type(run_path : str) -> int:
     
     '''
@@ -533,5 +537,22 @@ def generative_report(candidate_list, reference_list):
         "Metric" : metrics,
         "Score" : scores
     })
+    
+def decorate_prompt(question : str, questions_map : str, strategy : str):
+    
+    prompt_strategies = {
+        "template-1" : "Answer the following question: <q> Options: <o>",
+        "cot-1" : " Q: <q> Options: <o>, A: Let’s think step-by-step"
+    }
+    
+    decorated_prompt = prompt_strategies[strategy].replace(
+                        '<q>', question
+                       ).replace(
+                        '<o>', ', '.join(questions_map[question])
+                       )
+    
+    return decorated_prompt
+
+
 
 logger = init_logger(logging)

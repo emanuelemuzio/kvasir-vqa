@@ -26,7 +26,6 @@ configs = {
         'concat'
     ],
     'prompting' : [
-        '1',
         '0'
     ]
 }

@@ -11,6 +11,7 @@ import torch
 import argparse
 from dotenv import load_dotenv
 from vilt.model import launch_experiment
+from vilt.multilabel import launch_experiment as ml_launch_experiment
 from common.util import update_best_runs_v2
 
 load_dotenv()
@@ -41,10 +42,16 @@ if __name__ == '__main__':
     parser.add_argument('--min_epochs', help='')
     parser.add_argument('--use_aug', help="'1' to use augmented data (important for data balance of kvasirvqa dataset)")
     parser.add_argument('--run_id', help="Continue the training if checkpoint.pt is present in the run folder, else just run the tests for it")
+    parser.add_argument('--model_mode', help="leave empty for normal mode, 'multilabel' if you want to use multilabel transformed metadata file")
 
     args = parser.parse_args()       
+    
+    mode = args.model_mode or None
         
-    launch_experiment(args=args, device=device)
+    if mode == 'multilabel':
+        ml_launch_experiment(args=args, device=device)
+    else:
+        launch_experiment(args=args, device=device)
     
     update_best_runs_v2(
         best_run_path=os.getenv('BEST_RUN_PATH').replace('REPLACE_ME','vilt'),
