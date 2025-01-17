@@ -9,11 +9,16 @@ from dotenv import load_dotenv
 import torch
 from torchvision.transforms import v2
 import shutil
+import nltk
+nltk.download('punkt_tab')
+nltk.download('wordnet')
 from nltk.translate.bleu_score import sentence_bleu
 from nltk.translate import meteor
 from nltk import word_tokenize
 import pandas as pd
 import evaluate
+from sklearn.metrics import f1_score
+
 rouge = evaluate.load('rouge')
 
 load_dotenv()
@@ -447,7 +452,7 @@ def calculate_rouge(candidates, references):
     '''
     candidate, reference: generated and ground-truth sentences
     '''
-    scores = rouge.compute(predictions=candidates, references=references)
+    scores = rouge.compute(predictions=[candidates], references=[references])
     return scores
 
 def calculate_bleu(candidate, reference):
@@ -505,38 +510,75 @@ def check_run_type(run_path : str) -> int:
     else:
         return 1
                 
-def generative_report(candidate_list, reference_list):
+def create_generative_report(question_list : list, candidate_list : list, reference_list : list):
     
-    bleu_score = calculate_bleu(candidate_list, reference_list)
-    rouge_scores = calculate_rouge(candidate_list, reference_list)
-    meteor_score = calculate_meteor(candidate_list, reference_list)
-    rouge1_score = rouge_scores['rouge1']
-    rouge2_score = rouge_scores['rouge2']
-    rougeL_score = rouge_scores['rougeL']
-    rougeLsum_score = rouge_scores['rougeLsum']
-    
-    metrics = [
+    mean_header = [
+        'MEAN SCORES',
+        ' ',
+        ' ',
         'BLEU',
         'METEOR',
         'ROUGE-1',
         'ROUGE-2',
         'ROUGE-L',
-        'ROUGE-L SUM',
+        'ROUGE-L SUM'
     ]
+    rows = []
+    header = [[
+        'QUESTION',
+        'CANDIDATE',
+        'REFERENCE',
+        'BLEU',
+        'METEOR',
+        'ROUGE-1',
+        'ROUGE-2',
+        'ROUGE-L',
+        'ROUGE-L SUM'
+    ]]
     
-    scores = [
-        bleu_score,
-        meteor_score,
-        rouge1_score,
-        rouge2_score,
-        rougeL_score,
-        rougeLsum_score
-    ]
+    for (question, candidate, reference) in zip(question_list, candidate_list, reference_list):
+        bleu_score = calculate_bleu(candidate, reference)
+        rouge_scores = calculate_rouge(candidate, reference)
+        meteor_score = calculate_meteor(candidate, reference)
+        rouge1_score = rouge_scores['rouge1']
+        rouge2_score = rouge_scores['rouge2']
+        rougeL_score = rouge_scores['rougeL']
+        rougeLsum_score = rouge_scores['rougeLsum']
+        
+        rows.append([
+            question,
+            candidate,
+            reference,
+            bleu_score, 
+            meteor_score,
+            rouge1_score, 
+            rouge2_score, 
+            rougeL_score, 
+            rougeLsum_score
+        ])
+        
+    bleu_mean = np.mean(list(map(lambda r : r[3], rows)))
+    meteor_mean = np.mean(list(map(lambda r : r[4], rows)))
+    rouge1_mean = np.mean(list(map(lambda r : r[5], rows)))
+    rouge2_mean = np.mean(list(map(lambda r : r[6], rows)))
+    rougeL_mean = np.mean(list(map(lambda r : r[7], rows)))
+    rougeLsum_mean = np.mean(list(map(lambda r : r[8], rows)))
+        
+    for i in range(len(rows)):
+        rows[i][3] = str(rows[i][3])
+        rows[i][4] = str(rows[i][4])
+        rows[i][5] = str(rows[i][5])
+        rows[i][6] = str(rows[i][6]) 
+        rows[i][7] = str(rows[i][7])
+        rows[i][8] = str(rows[i][8])
+        
+    data = [
+        mean_header,
+        ['', '', '', bleu_mean, meteor_mean, rouge1_mean, rouge2_mean, rougeL_mean, rougeLsum_mean],
+    ] + header + rows 
     
-    return pd.DataFrame({
-        "Metric" : metrics,
-        "Score" : scores
-    })
+    results = pd.DataFrame(data)
+    return results
     
 def decorate_prompt(question : str, questions_map : str, strategy : str):
     
@@ -553,6 +595,25 @@ def decorate_prompt(question : str, questions_map : str, strategy : str):
     
     return decorated_prompt
 
+def save_multilabel_results(y_true : list, y_pred : list, labels : list, path : str, run_id : str):
+    f1_scoring = f1_score(y_true, y_pred, average=None)
+    
+    scoring_columns = ['Label', 'F1 Score']
+    scoring_rows = [(label, score) for (label, score) in zip(labels, f1_scoring.tolist())]
+    scoring_rows.append(('Macro', f1_score(y_true, y_pred, average='macro')))
+    
+    results_columns = ['True', 'Pred']
+    
+    results_rows = [(','.join(map(str, map(int, x1))), ','.join(map(str, map(int, x2)))) for (x1, x2) in zip(y_pred, y_true)]
+    
+    pd.DataFrame(data=scoring_rows, columns=scoring_columns).to_csv(f"{path}/{run_id}_scoring.csv", index=False, sep=';')
+    pd.DataFrame(data=results_rows, columns=results_columns).to_csv(f"{path}/{run_id}_results.csv", index=False, sep=';')
+    
+def clean_runs(unique_key : str, path : str):
+    for run_id in os.listdir(path):
+        if not os.path.exists(f"{path}/{run_id}/{unique_key}"):
+            shutil.rmtree(f"{path}/{run_id}")
+        
 
 
 logger = init_logger(logging)

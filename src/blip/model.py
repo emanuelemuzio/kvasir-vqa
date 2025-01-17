@@ -6,10 +6,11 @@ import os
 import pandas as pd
 import argparse
 import json
-from common.util import ROOT, logger, generate_run_id, generative_report, decorate_prompt
+from common.util import ROOT, logger, generate_run_id, create_generative_report, decorate_prompt
 from blip.data import Dataset_
 from dotenv import load_dotenv
 from transformers import BlipProcessor, BlipForQuestionAnswering
+from tqdm.auto import tqdm
 
 load_dotenv()      
 RANDOM_SEED = int(os.getenv('RANDOM_SEED'))
@@ -20,10 +21,11 @@ def predict(
     dataset
     ):
     
+    question_list = []
     candidate_list = []
     reference_list = []
         
-    for item in dataset:
+    for item in tqdm(dataset):
             
         encoding = item['encoding'].to(device)
         answer = item['answer']
@@ -32,13 +34,14 @@ def predict(
         out = model.generate(**encoding)
         generated_text = dataset.processor.decode(out[0], skip_special_tokens=True)
             
+        question_list.append(question)
         reference_list.append(answer)
         candidate_list.append(generated_text)
                 
         if device == 'cuda':
             torch.cuda.empty_cache()
                 
-    return candidate_list, reference_list
+    return question_list, candidate_list, reference_list
     
 def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
@@ -46,6 +49,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
     with open(os.getenv('QUESTIONS_MAP')) as f:
         questions_map = json.load(f)
+        f.close()
     
     model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
     processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
@@ -57,15 +61,13 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
   
     kvasir_vqa_datapath = f"{ROOT}/{os.getenv('KVASIR_VQA_DATA')}"
     
-    df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_CSV')}") 
+    df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_CSV_CLEAN')}") 
     
     logger.info("Dataset retrieved")
         
     df.dropna(axis=0, inplace=True)
     
     y_column = 'answer'
-    x_columns = df.columns.to_list()
-    x_columns.remove(y_column)
     
     X = df.drop(y_column, axis=1)
     Y = df[y_column]
@@ -98,15 +100,14 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
     logger.info(f'Starting test phase')
     
-    candidate_list, reference_list = predict(
+    question_list, candidate_list, reference_list = predict(
         model=model, 
         device=device,
         dataset=dataset
     ) 
         
-    results = generative_report(candidate_list, reference_list)
-    
-    results.to_csv(f"{run_path}/generative_report.csv", index=False)
+    results = create_generative_report(question_list, candidate_list, reference_list)
+    results.to_csv(f"{run_path}/generative_report.csv", index=False, sep=";")
         
     logger.info("Saved generative report")
     

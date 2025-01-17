@@ -94,15 +94,15 @@
             "args": [
                 "--model=vilt",
                 "--turnoff=-1",
-                "--num_epochs=100",
+                "--num_epochs=30",
                 "--batch_size=16",
                 "--lr=0.00004",
                 "--momentum=0.9",
                 "--T_max=100",
                 "--eta_min=0.001",
-                "--patience=5",
+                "--patience=3",
                 "--min_delta=0.001",
-                "--scheduler=exponential",
+                "--scheduler=plateau",
                 "--optimizer=adamw",
                 "--mode=min",
                 "--weight_decay=0.01",
@@ -110,9 +110,9 @@
                 "--gamma=0.00001",
                 "--prompting=0",
                 "--delete_ckp=1",
-                "--min_epochs=20",
+                "--min_epochs=0",
                 "--use_aug=1",
-                "--run_id=",
+                "--run_id=16012025000508",
                 "--model_mode=multilabel"
             ]
         },
@@ -124,7 +124,9 @@
             "console": "integratedTerminal",
             "args": [
                 "-read=./data/kvasir-vqa/questions.txt",
-                "-adjust_ratio=0.4"
+                "-adjust_ratio=0.4",
+                "-ngram=4",
+                "-max_display_num=4"
             ]
         }
     ]

@@ -10,11 +10,12 @@ import os
 import argparse
 from dotenv import load_dotenv
 from blip.model import launch_experiment
+import torch
+from common.util import clean_runs, ROOT
 
 load_dotenv()
 
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = 'cpu'
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
  
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -28,6 +29,8 @@ if __name__ == '__main__':
     launch_experiment(args=args, device=device)
     
     turnoff = int(args.turnoff)
+    
+    clean_runs(unique_key='generative_report.csv', path=f"{ROOT}/{os.getenv('BLIP_RUNS')}")
     
     if turnoff >= 0:
         os.system(f"shutdown /s /t {turnoff}")

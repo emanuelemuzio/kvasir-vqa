@@ -8,7 +8,7 @@ import argparse
 import json
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from common.util import ROOT, logger, generate_run_id, plot_run, check_run_type
+from common.util import ROOT, logger, generate_run_id, plot_run, check_run_type, save_multilabel_results
 from common.earlystop import EarlyStopper
 from vilt.data import MultilabelDataset
 from vilt.data import get_multilabel_config as get_config
@@ -102,7 +102,7 @@ def evaluate(
                 'val_loss' : val_loss,
                 'val_acc' : val_acc,
                 'run_id' : run_id
-            }, f"{ROOT}/{os.getenv('VILT_RUNS')}/{run_id}/model.pt") 
+            }, f"{ROOT}/{os.getenv('VILT_RUNS')}/{run_id}/checkpoint.pt") 
 
             logger.info('Checkpoint reached')
             
@@ -266,7 +266,7 @@ def val(
         val_acc /= len(val_dataset)
         
         for s in scheduler:
-            s.step()
+            s.step(val_loss)
 
         return val_loss, val_acc 
     
@@ -288,7 +288,7 @@ def predict(
             pixel_values = batch['pixel_values'].unsqueeze(0)
             attention_mask = batch['attention_mask'].unsqueeze(0)
             token_type_ids = batch['token_type_ids'].unsqueeze(0)
-            labels = batch['labels'].unsqueeze(0)
+            labels = torch.FloatTensor(batch['labels']).unsqueeze(0)
             
             encoding = processor.image_processor.pad(pixel_values, return_tensors="pt").to(device)
             
@@ -584,11 +584,6 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
             torch.save(best_weights, f"{run_path}/model.pt")
             
         case 3:
-    
-            val_acc = checkpoint['val_acc']
-            val_loss = checkpoint['val_loss']
-            train_acc = checkpoint['train_acc']
-            train_loss = checkpoint['train_loss']
             best_weights = torch.load(f"{run_path}/model.pt", weights_only=True) 
         
     logger.info(f'Starting test phase')
@@ -602,27 +597,27 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         dataset=test_dataset
     )
     
-    f1_scoring = f1_score(y_true, y_pred, average=None).tolist()
-    f1_macro_score = f1_score(y_true, y_pred, average='macro')
+    del(model)
+    torch.cuda.empty_cache()    
     
-    columns = list(config.id2label.values())
+    labels = list(config.id2label.values())
     
-    pd.DataFrame({'Class': columns, 'F1-Score': f1_scoring}).to_csv(f"{run_path}/test_results.csv", index=False)
+    save_multilabel_results(y_true=y_true, y_pred=y_pred, labels=labels, path=run_path, run_id=run_id)
     
     logger.info("Saved test report")
     
-    with open(f"{run_path}/run.json", "w") as f:
-        config = vars(args)
-        config['train_loss'] = train_loss
-        config['val_loss'] = val_loss
-        config['train_acc'] = train_acc
-        config['val_acc'] = val_acc
-        config['run_id'] = run_id
-        config['test_acc'] = f1_macro_score
-        json.dump(config, f)
+    if run_type != 3:
+        with open(f"{run_path}/run.json", "w") as f:
+            config = vars(args)
+            config['train_loss'] = train_loss
+            config['val_loss'] = val_loss
+            config['train_acc'] = train_acc
+            config['val_acc'] = val_acc
+            config['run_id'] = run_id
+            json.dump(config, f)
 
-    os.remove(f"{run_path}/checkpoint.pt") 
+        os.remove(f"{run_path}/checkpoint.pt") 
 
-    plot_run(base_path=f"{ROOT}/{os.getenv('VILT_RUNS')}", run_id=run_id)
-    
-    logger.info("Run plotted and save to run.json file")
+        plot_run(base_path=f"{ROOT}/{os.getenv('VILT_RUNS')}", run_id=run_id)
+        
+        logger.info("Run plotted and save to run.json file")

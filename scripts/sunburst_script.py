@@ -201,7 +201,7 @@ if __name__ == '__main__':
     
     # read file
     texts = readlines_iterative(args.read)
-
+    
     # generate ngram
     ngramTrie = computeNgramTrie(args, texts, n=args.ngram, deliminator=" ")
     
