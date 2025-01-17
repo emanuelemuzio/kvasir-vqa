@@ -557,12 +557,12 @@ def create_generative_report(question_list : list, candidate_list : list, refere
             rougeLsum_score
         ])
         
-    bleu_mean = np.mean(list(map(lambda r : r[3], rows)))
-    meteor_mean = np.mean(list(map(lambda r : r[4], rows)))
-    rouge1_mean = np.mean(list(map(lambda r : r[5], rows)))
-    rouge2_mean = np.mean(list(map(lambda r : r[6], rows)))
-    rougeL_mean = np.mean(list(map(lambda r : r[7], rows)))
-    rougeLsum_mean = np.mean(list(map(lambda r : r[8], rows)))
+    bleu_mean = np.round(np.mean(list(map(lambda r : r[3], rows))), 4) 
+    meteor_mean = np.round(np.mean(list(map(lambda r : r[4], rows))), 4) 
+    rouge1_mean = np.round(np.mean(list(map(lambda r : r[5], rows))), 4) 
+    rouge2_mean = np.round(np.mean(list(map(lambda r : r[6], rows))), 4) 
+    rougeL_mean = np.round(np.mean(list(map(lambda r : r[7], rows))), 4) 
+    rougeLsum_mean = np.round(np.mean(list(map(lambda r : r[8], rows))), 4) 
         
     for i in range(len(rows)):
         rows[i][3] = str(rows[i][3])

@@ -7,11 +7,11 @@ import warnings
 warnings.filterwarnings('ignore')
 
 import os
-import torch
 import argparse
 from dotenv import load_dotenv
 from git.model import launch_experiment
-from common.util import update_best_runs_v2
+import torch
+from common.util import clean_runs, ROOT
 
 load_dotenv()
 
@@ -28,12 +28,9 @@ if __name__ == '__main__':
         
     launch_experiment(args=args, device=device)
     
-    update_best_runs_v2(
-        best_run_path=os.getenv('BEST_RUN_PATH').replace('REPLACE_ME','git'),
-        runs_path=os.getenv('GIT_RUNS')
-    )
-    
     turnoff = int(args.turnoff)
+    
+    clean_runs(unique_key='generative_report.csv', path=f"{ROOT}/{os.getenv('GIT_RUNS')}")
     
     if turnoff >= 0:
         os.system(f"shutdown /s /t {turnoff}")

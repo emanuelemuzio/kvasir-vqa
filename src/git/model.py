@@ -6,10 +6,11 @@ import os
 import pandas as pd
 import argparse
 import json
-from common.util import ROOT, logger, generate_run_id, generative_report, decorate_prompt
+from common.util import ROOT, logger, generate_run_id, create_generative_report, decorate_prompt
 from git.data import Dataset_
 from dotenv import load_dotenv
 from transformers import AutoProcessor, AutoModelForCausalLM
+from tqdm.auto import tqdm
 
 load_dotenv()      
 RANDOM_SEED = int(os.getenv('RANDOM_SEED')) 
@@ -22,31 +23,30 @@ def predict(
     
     model.eval()
     
+    question_list = []
     candidate_list = []
     reference_list = []
         
     with torch.no_grad():
-        for item in dataset:
+        for item in tqdm(dataset):
             
             input_ids = item['input_ids'].to(device)
             pixel_values = item['pixel_values'].to(device)
-            attention_masked = item['attention_mask'].to(device)
-            labels = item['labels'].to(device)
+            question = item['question']
+            reference = item['answer']
 
-            outputs = model.generate(
-                input_ids=input_ids,
-                pixel_values=pixel_values,
-                attention_mask=attention_masked,
-                labels=labels
-            )
+            generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=100)
             
-            generated_text = dataset.processor.decode(outputs[0], skip_special_tokens=True)
+            candidate = dataset.processor.batch_decode(generated_ids[:, input_ids.shape[1]:], skip_special_tokens=True).pop()
                 
-            del(batch)
+            question_list.append(question)
+            candidate_list.append(candidate)
+            reference_list.append(reference)
+                
             if device == 'cuda':
                 torch.cuda.empty_cache()
                 
-    return candidate_list, reference_list
+    return question_list, candidate_list, reference_list
     
 def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
@@ -55,8 +55,8 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     with open(os.getenv('QUESTIONS_MAP')) as f:
         questions_map = json.load(f)
     
-    processor = AutoProcessor.from_pretrained("microsoft/git-base-msrvtt-qa")
-    model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-msrvtt-qa")
+    processor = AutoProcessor.from_pretrained("microsoft/git-base-textvqa")
+    model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-textvqa")
     model.to(device)
     
     logger.info(f"Launching experiment with configuration: {args}")
@@ -65,15 +65,13 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
   
     kvasir_vqa_datapath = f"{ROOT}/{os.getenv('KVASIR_VQA_DATA')}"
     
-    df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_CSV')}") 
+    df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_CSV_CLEAN')}") 
     
     logger.info("Dataset retrieved")
         
     df.dropna(axis=0, inplace=True)
     
     y_column = 'answer'
-    x_columns = df.columns.to_list()
-    x_columns.remove(y_column)
     
     X = df.drop(y_column, axis=1)
     Y = df[y_column]
@@ -106,15 +104,14 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
     logger.info(f'Starting test phase')
     
-    candidate_list, reference_list = predict(
+    question_list, candidate_list, reference_list = predict(
         model=model, 
         device=device,
         dataset=dataset
     ) 
         
-    results = generative_report(candidate_list, reference_list)
-    
-    results.to_csv(f"{run_path}/generative_report.csv", index=False)
+    results = create_generative_report(question_list, candidate_list, reference_list)
+    results.to_csv(f"{run_path}/generative_report.csv", index=False, sep=";")
         
     logger.info("Saved generative report")
     

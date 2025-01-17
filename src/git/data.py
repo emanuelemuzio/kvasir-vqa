@@ -75,16 +75,18 @@ class Dataset_(Dataset):
         answer = self.answer[idx]
         img_id = self.img_id[idx]
         
-        full_path = f"{self.aug_path}/{img_id}.jpg" if 'aug' in img_id else f"{self.base_path}/{img_id}.jpg" 
+        full_path = f"{self.base_path}/{img_id}.jpg" 
         img = read_image(full_path)
-
-        encoding = self.processor(
-            img, 
-            question, 
-            return_tensors="pt"
-        )
         
-        item = {
-            'encoding' : encoding,
-            'answer' : answer
+        pixel_values = self.processor(images=img, return_tensors="pt").pixel_values
+
+        input_ids = self.processor(text=question, add_special_tokens=False).input_ids
+        input_ids = [self.processor.tokenizer.cls_token_id] + input_ids
+        input_ids = torch.tensor(input_ids).unsqueeze(0)
+        
+        return {
+            'question' : question,
+            'answer' : answer,
+            'pixel_values' : pixel_values,
+            'input_ids' : input_ids
         }
