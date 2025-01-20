@@ -8,7 +8,7 @@ import argparse
 import json
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from common.util import ROOT, logger, generate_run_id, plot_run, check_run_type, save_multilabel_results
+from common.util import ROOT, logger, generate_run_id, plot_run, check_run_type, save_multilabel_results, get_new_tokens
 from common.earlystop import EarlyStopper
 from vilt.data import MultilabelDataset
 from vilt.data import get_multilabel_config as get_config
@@ -21,10 +21,29 @@ from sklearn.metrics import f1_score
 
 load_dotenv()      
 RANDOM_SEED = int(os.getenv('RANDOM_SEED'))
+processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-mlm")
+
+def collate_fn(batch):
+    input_ids = [item['input_ids'] for item in batch]
+    pixel_values = [item['pixel_values'] for item in batch]
+    attention_mask = [item['attention_mask'] for item in batch]
+    token_type_ids = [item['token_type_ids'] for item in batch]
+    labels = [torch.tensor(item['labels']) for item in batch]
+
+    encoding = processor.image_processor.pad(pixel_values, return_tensors="pt")
+
+    batch = {}
+    batch['input_ids'] = torch.stack(input_ids)
+    batch['attention_mask'] = torch.stack(attention_mask)
+    batch['token_type_ids'] = torch.stack(token_type_ids)
+    batch['pixel_values'] = encoding['pixel_values']
+    batch['pixel_mask'] = encoding['pixel_mask']
+    batch['labels'] = torch.stack(labels).float()
+
+    return batch
 
 def evaluate(
             model, 
-            processor,
             num_epochs : int, 
             batch_size : int, 
             optimizer : torch.optim, 
@@ -42,8 +61,8 @@ def evaluate(
     
     logger.info('Starting model evaluation')
 
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
     
     train_loss = []
     val_loss = []
@@ -67,7 +86,6 @@ def evaluate(
 
         epoch_train_loss, epoch_train_acc = train(
             model,
-            processor,
             train_dataloader, 
             optimizer, 
             device
@@ -80,7 +98,6 @@ def evaluate(
             model, 
             val_dataloader,
             scheduler, 
-            processor,
             device
         )
         
@@ -112,11 +129,8 @@ def evaluate(
             
     return train_loss, train_acc, val_loss, val_acc, best_weights
 
-
-
 def train(
     model,
-    processor,
     train_dataset, 
     optimizer : torch.optim, 
     device : str): 
@@ -130,23 +144,7 @@ def train(
         
         optimizer.zero_grad()
         
-        input_ids = [item for item in batch['input_ids']]
-        pixel_values = [item for item in batch['pixel_values']]
-        attention_mask = [item for item in batch['attention_mask']]
-        token_type_ids = [item for item in batch['token_type_ids']]
-        labels = [item for item in batch['labels']]
-        
-        encoding = processor.image_processor.pad(pixel_values, return_tensors="pt").to(device)
-        
-        data = {}
-        data['input_ids'] = torch.stack(input_ids)
-        data['attention_mask'] = torch.stack(attention_mask)
-        data['token_type_ids'] = torch.stack(token_type_ids)
-        data['pixel_values'] = encoding['pixel_values']
-        data['pixel_mask'] = encoding['pixel_mask']
-        data['labels'] = torch.stack(labels).float()
-        
-        data = {k:v.to(device) for k,v in data.items()}
+        data = {k:v.to(device) for k,v in batch.items()}
         
         output = model(**data)
 
@@ -177,7 +175,6 @@ def val(
     model, 
     val_dataset,  
     scheduler,
-    processor,
     device : str):
     
     '''
@@ -222,23 +219,7 @@ def val(
     with torch.no_grad():
         for batch in tqdm(val_dataset, desc='Validation phase...'):
         
-            input_ids = [item for item in batch['input_ids']]
-            pixel_values = [item for item in batch['pixel_values']]
-            attention_mask = [item for item in batch['attention_mask']]
-            token_type_ids = [item for item in batch['token_type_ids']]
-            labels = [item for item in batch['labels']]
-            
-            encoding = processor.image_processor.pad(pixel_values, return_tensors="pt").to(device)
-            
-            data = {}
-            data['input_ids'] = torch.stack(input_ids)
-            data['attention_mask'] = torch.stack(attention_mask)
-            data['token_type_ids'] = torch.stack(token_type_ids)
-            data['pixel_values'] = encoding['pixel_values']
-            data['pixel_mask'] = encoding['pixel_mask']
-            data['labels'] = torch.stack(labels).float()
-            
-            data = {k:v.to(device) for k,v in data.items()}
+            data = {k:v.to(device) for k,v in batch.items()}
             
             output = model(**data)
 
@@ -259,10 +240,8 @@ def val(
             if device == 'cuda':
                 torch.cuda.empty_cache()
 
-        # Calculate validation loss
         val_loss /= len(val_dataset)
 
-        # Calculate validation accuracy
         val_acc /= len(val_dataset)
         
         for s in scheduler:
@@ -324,12 +303,17 @@ def predict(
     
 def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
-    processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-mlm")
     config = ViltConfig.from_dict(get_config())
     model = ViltForQuestionAnswering.from_pretrained("dandelin/vilt-b32-mlm",
                                                  id2label=config.id2label,
                                                  label2id=config.label2id)
     model.to(device)
+    
+    new_tokens = get_new_tokens(processor.tokenizer)
+    processor.tokenizer.add_tokens(new_tokens)
+    model.resize_token_embeddings(len(processor.tokenizer))
+    
+    print(f"Added {len(new_tokens)} new tokens to tokenizer")
     
     logger.info(f"Launching experiment with configuration: {args}")
     
@@ -526,7 +510,6 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         
             train_loss, train_acc, val_loss, val_acc, best_weights = evaluate(
                 model=model, 
-                processor=processor,
                 num_epochs=num_epochs, 
                 batch_size=batch_size,
                 optimizer=optimizer, 
@@ -563,7 +546,6 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         
             train_loss, train_acc, val_loss, val_acc, best_weights = evaluate(
                 model=model, 
-                processor=processor,
                 num_epochs=num_epochs, 
                 batch_size=batch_size,
                 optimizer=optimizer, 

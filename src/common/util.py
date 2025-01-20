@@ -355,9 +355,7 @@ def image_transform() -> v2.Compose:
 
 def update_best_runs(key='', best_run_path='', runs_path='', del_others=False):
     
-    subject = 'feature extractor' if key == 'model' else 'classifier'
-    
-    logger.info(f"Updating runs for {subject}")
+    logger.info(f"Updating runs for {key}")
     
     runs_list = []
     
@@ -365,13 +363,12 @@ def update_best_runs(key='', best_run_path='', runs_path='', del_others=False):
         if os.path.exists(f"{ROOT}/{runs_path}/{run_id}/run.json"):
             data = get_run_info(f"{runs_path}/{run_id}/run.json")
             runs_list.append({
-                "model" : data['model'],
-                "test_acc" : data['test_acc'],
+                key : data[key],
                 "run_id" : run_id
             })
         else:
             logger.info(f"Cleaning {runs_path}/{run_id} directory")
-            os.rmdir(f"{ROOT}/{runs_path}/{run_id}")
+            shutil.rmtree(f"{ROOT}/{runs_path}/{run_id}")
 
     best_runs = {}
 
@@ -613,7 +610,23 @@ def clean_runs(unique_key : str, path : str):
     for run_id in os.listdir(path):
         if not os.path.exists(f"{path}/{run_id}/{unique_key}"):
             shutil.rmtree(f"{path}/{run_id}")
-        
+    
+from nltk.tokenize import RegexpTokenizer
 
+def remove_punctuation(word):
+    tokenizer = RegexpTokenizer(r'\w+') 
+    return tokenizer.tokenize(word)
+
+def get_new_tokens(tokenizer):
+    df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_CSV_CLEAN')}")
+    
+    kvasir_vqa_tokens = list(set(flatten(df['question'].map(lambda x : remove_punctuation(x.lower())) + df['answer'].map(lambda x : remove_punctuation(x.lower())))))
+    new_tokens = kvasir_vqa_tokens - tokenizer.vocab.keys() 
+    
+    return list(new_tokens)
+    
+
+def flatten(xss):
+    return [x for xs in xss for x in xs]
 
 logger = init_logger(logging)

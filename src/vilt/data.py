@@ -8,6 +8,7 @@ import torch
 from torchvision.transforms import v2
 import pandas as pd
 from common.util import init_kvasir_vocab, init_kvasir_vocab_multilabel
+from PIL import Image
 
 RANDOM_SEED = int(os.getenv('RANDOM_SEED'))
 
@@ -132,7 +133,8 @@ class MultilabelDataset(Dataset):
         img_id = self.img_id[idx]
         
         full_path = f"{self.aug_path}/{img_id}.jpg" if 'aug' in img_id else f"{self.base_path}/{img_id}.jpg" 
-        img = self.transform(read_image(full_path))
+        # img = self.transform(read_image(full_path))
+        img = Image.open(full_path)
 
         encoding = self.processor(
             images=img,

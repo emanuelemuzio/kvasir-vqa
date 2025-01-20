@@ -385,7 +385,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         if use_aug:
             df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_CSV_AUG')}")
         else:
-            df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_CSV')}") 
+            df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_CSV_CLEAN')}") 
     
     logger.info("Dataset retrieved")
         

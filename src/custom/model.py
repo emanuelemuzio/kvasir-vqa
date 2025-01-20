@@ -16,8 +16,8 @@ from common.util import ROOT, logger, get_run_info, generate_run_id, plot_run
 from common.prompting import PromptTuning
 from torcheval.metrics.functional import multiclass_accuracy
 from common.earlystop import EarlyStopper
-from custom import HadamardClassifier, ConcatClassifier, ConvVQA, BiggerConvVQA
-from kvasirvqa.data import Dataset_
+from custom.architecture import HadamardClassifier, ConcatClassifier, ConvVQA, BiggerConvVQA
+from custom.data import Dataset_
 from dotenv import load_dotenv
 from question_encode.model import get_tokenizer, get_language_model
 from feature_extractor.model import init

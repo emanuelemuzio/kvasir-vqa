@@ -294,3 +294,38 @@ class BiggerConvVQA(nn.Module):
         # Classificazione
         x = self.fc(x)           # Output shape: (batch_size, vocabulary_size)
         return x
+    
+class MultilabelVQA(nn.Module):
+    
+    def __init__(
+        self,
+        vocabulary_size : int,
+        question_embedding_dim : int,
+        image_feature_dim : int,
+        intermediate_dim=512):
+        
+        super(MultilabelVQA, self).__init__() 
+        
+        self.prepare_multimodal_v = nn.Sequential(
+            nn.Linear(image_feature_dim, intermediate_dim),
+            nn.ReLU(),
+            nn.Dropout(0.5)
+        )
+        
+        self.prepare_multimodal_q = nn.Sequential(
+            nn.Linear(question_embedding_dim, intermediate_dim),
+            nn.Dropout(0.5)
+        )
+        
+        self.classifier = nn.Linear(intermediate_dim, vocabulary_size)
+         
+    def forward(self, encoded_question, feature_vector): 
+        
+        v = self.prepare_multimodal_v(feature_vector)
+        q = self.prepare_multimodal_q(encoded_question)
+        
+        h = torch.mul(v, q)
+        
+        logits = self.classifier(h)
+        
+        return logits

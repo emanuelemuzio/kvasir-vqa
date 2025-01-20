@@ -9,7 +9,8 @@ import torch
 import argparse
 from dotenv import load_dotenv
 from custom.model import launch_experiment
-from common.util import ROOT, get_run_info, update_best_runs, delete_other_runs, get_best_feature_extractor_info
+from custom.multilabel import launch_experiment as ml_launch_experiment
+from common.util import ROOT, get_run_info, update_best_runs, get_best_feature_extractor_info
 
 load_dotenv()
 
@@ -57,8 +58,15 @@ if __name__ == '__main__':
     parser.add_argument('--min_epochs', help='Early stopper min. epochs activation')
     parser.add_argument('--use_best_fe', help="'1' to use the feature extractor with the highest test accuracy")
     parser.add_argument('--use_aug', help="'1' to use augmented data (important for data balance of kvasirvqa dataset)")
+    parser.add_argument('--format', help="'multilabel'")
+    parser.add_argument('--step_size', help="")
+    parser.add_argument('--gamma', help="")
+    parser.add_argument('--run_id', help="")
+    parser.add_argument('--del_others', help="")
 
     args = parser.parse_args()
+    
+    data_format = args.format or None
     
     run_all = args.run_all == "1"
         
@@ -96,18 +104,21 @@ if __name__ == '__main__':
                     if not (feature_extractor, architecture, prompting) in skip_configs:                    
                         launch_experiment(args=args, device=device)
     else:
-        launch_experiment(args=args, device=device)
+        if data_format == 'multilabel':
+            ml_launch_experiment(args=args, device=device)
+        else:
+            launch_experiment(args=args, device=device)
     
     turnoff = int(args.turnoff)
     
     del_others = args.del_others == '1'
     
-    update_best_runs(
-        key='architecture',
-        best_run_path=os.getenv('BEST_RUN_PATH').replace('REPLACE_ME','classifier'),
-        runs_path=os.getenv('CLASSIFIER_RUNS'),
-        del_others=del_others
-    )
+    # update_best_runs(
+    #     key='architecture',
+    #     best_run_path=os.getenv('BEST_RUN_PATH').replace('REPLACE_ME','custom'),
+    #     runs_path=os.getenv('CUSTOM_RUNS'),
+    #     del_others=del_others
+    # )
     
     if turnoff >= 0:
         os.system(f"shutdown /s /t {turnoff}")
