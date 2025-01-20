@@ -1,3 +1,6 @@
+import sys
+sys.path.append('cider')
+
 from datetime import datetime
 import json
 import os
@@ -18,7 +21,9 @@ from nltk import word_tokenize
 import pandas as pd
 import evaluate
 from sklearn.metrics import f1_score
+from pycocoevalcap.cider.cider import Cider
 
+cider_scorer = Cider()
 rouge = evaluate.load('rouge')
 
 load_dotenv()
@@ -479,6 +484,19 @@ def init_kvasir_vocab_multilabel():
     f = open(f"{ROOT}/{os.getenv('KVASIR_VQA_VOCABULARY_MULTILABEL')}")
     return json.load(f)
 
+def calculate_cider(candidate, reference):
+   
+    references = {"0": [reference]}   
+    candidates = {"0": [candidate]}   
+
+    cider_scorer = Cider()
+
+    score, _ = cider_scorer.compute_score(references, candidates)
+
+    print(f"CIDEr score: {score}")
+    
+    return score
+
 def check_run_type(run_path : str) -> int:
     
     '''
@@ -515,6 +533,7 @@ def create_generative_report(question_list : list, candidate_list : list, refere
         ' ',
         ' ',
         'BLEU',
+        'CIDER',
         'METEOR',
         'ROUGE-1',
         'ROUGE-2',
@@ -527,6 +546,7 @@ def create_generative_report(question_list : list, candidate_list : list, refere
         'CANDIDATE',
         'REFERENCE',
         'BLEU',
+        'CIDER',
         'METEOR',
         'ROUGE-1',
         'ROUGE-2',
@@ -542,12 +562,14 @@ def create_generative_report(question_list : list, candidate_list : list, refere
         rouge2_score = rouge_scores['rouge2']
         rougeL_score = rouge_scores['rougeL']
         rougeLsum_score = rouge_scores['rougeLsum']
+        cider_score = calculate_cider(candidate, reference)
         
         rows.append([
             question,
             candidate,
             reference,
             bleu_score, 
+            cider_score,
             meteor_score,
             rouge1_score, 
             rouge2_score, 
@@ -556,11 +578,12 @@ def create_generative_report(question_list : list, candidate_list : list, refere
         ])
         
     bleu_mean = np.round(np.mean(list(map(lambda r : r[3], rows))), 4) 
-    meteor_mean = np.round(np.mean(list(map(lambda r : r[4], rows))), 4) 
-    rouge1_mean = np.round(np.mean(list(map(lambda r : r[5], rows))), 4) 
-    rouge2_mean = np.round(np.mean(list(map(lambda r : r[6], rows))), 4) 
-    rougeL_mean = np.round(np.mean(list(map(lambda r : r[7], rows))), 4) 
-    rougeLsum_mean = np.round(np.mean(list(map(lambda r : r[8], rows))), 4) 
+    cider_mean = np.round(np.mean(list(map(lambda r : r[4], rows))), 4) 
+    meteor_mean = np.round(np.mean(list(map(lambda r : r[5], rows))), 4) 
+    rouge1_mean = np.round(np.mean(list(map(lambda r : r[6], rows))), 4) 
+    rouge2_mean = np.round(np.mean(list(map(lambda r : r[7], rows))), 4) 
+    rougeL_mean = np.round(np.mean(list(map(lambda r : r[8], rows))), 4) 
+    rougeLsum_mean = np.round(np.mean(list(map(lambda r : r[9], rows))), 4) 
         
     for i in range(len(rows)):
         rows[i][3] = str(rows[i][3])
@@ -569,10 +592,11 @@ def create_generative_report(question_list : list, candidate_list : list, refere
         rows[i][6] = str(rows[i][6]) 
         rows[i][7] = str(rows[i][7])
         rows[i][8] = str(rows[i][8])
+        rows[i][9] = str(rows[i][9])
         
     data = [
         mean_header,
-        ['', '', '', bleu_mean, meteor_mean, rouge1_mean, rouge2_mean, rougeL_mean, rougeLsum_mean],
+        ['', '', '', bleu_mean, cider_mean, meteor_mean, rouge1_mean, rouge2_mean, rougeL_mean, rougeLsum_mean],
     ] + header + rows 
     
     results = pd.DataFrame(data)
@@ -650,7 +674,6 @@ def get_new_tokens(tokenizer):
     
     return list(new_tokens)
     
-
 def flatten(xss):
     return [x for xs in xss for x in xs]
 
