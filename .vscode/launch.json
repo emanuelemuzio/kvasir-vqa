@@ -91,6 +91,18 @@
             ]
         },
         {
+            "name": "Llava",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "--model=git",
+                "--turnoff=-1",
+                "--prompting=template-1"
+            ]
+        },
+        {
             "name": "ViLT",
             "type": "debugpy",
             "request": "launch",
@@ -118,7 +130,37 @@
                 "--min_epochs=5",
                 "--use_aug=1",
                 "--run_id=",
-                "--model_mode=multilabel"
+                "--model_mode="
+            ]
+        },
+        {
+            "name": "CLIP",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "--model=clip",
+                "--turnoff=-1",
+                "--num_epochs=50",
+                "--batch_size=8",
+                "--lr=0.00004",
+                "--momentum=0.9",
+                "--T_max=100",
+                "--eta_min=0.001",
+                "--patience=5",
+                "--min_delta=0.001",
+                "--scheduler=plateau",
+                "--optimizer=adamw",
+                "--mode=min",
+                "--weight_decay=0.01",
+                "--step_size=10",
+                "--gamma=0.00001",
+                "--prompting=0",
+                "--delete_ckp=1",
+                "--min_epochs=5",
+                "--use_aug=1",
+                "--run_id="
             ]
         },
         {

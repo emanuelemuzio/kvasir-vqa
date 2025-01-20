@@ -10,9 +10,11 @@ import os
 import torch
 import argparse
 from dotenv import load_dotenv
-from vilt.model import launch_experiment
-from vilt.multilabel import launch_experiment as ml_launch_experiment
-from common.util import logger
+from clip.model import launch_experiment
+from common.util import ROOT, logger
+import pandas as pd
+import shutil
+import json
 
 load_dotenv()
 
@@ -41,19 +43,45 @@ if __name__ == '__main__':
     parser.add_argument('--delete_ckp', help="If equals '1', the existing checkpoint will be deleted")
     parser.add_argument('--min_epochs', help='')
     parser.add_argument('--use_aug', help="'1' to use augmented data (important for data balance of kvasirvqa dataset)")
-    parser.add_argument('--run_id', help="Continue the training if checkpoint.pt is present in the run folder, else just run the tests for it")
-    parser.add_argument('--model_mode', help="leave empty for normal mode, 'multilabel' if you want to use multilabel transformed metadata file")
+    parser.add_argument('--run_id', help="Continue the training if checkpoint.pt is present in the run folder, else just run the tests for it") 
 
     args = parser.parse_args()       
     
-    mode = args.model_mode or None
-        
-    if mode != 'multilabel':
-        launch_experiment(args=args, device=device)        
-    else:
-        ml_launch_experiment(args=args, device=device)
+    launch_experiment(args=args, device=device)
     
-        logger.info(f"Updating best runs")
+    logger.info(f"Updating best runs")
+    
+    runs_list = []
+    
+    runs_path = f"{ROOT}/{os.getenv('CLIP_RUNS')}"
+    best_run_path = os.getenv('BEST_RUN_PATH').replace('REPLACE_ME', 'clip')
+    
+    for run_id in os.listdir(runs_path):
+        if os.path.exists(f"{runs_path}/{run_id}/run.json"):
+            data = pd.read_csv(f"{runs_path}/{run_id}/{run_id}_scoring.csv")
+            runs_list.append({
+                "model" : data['model'],
+                "test_acc" : data['test_acc'],
+                "run_id" : run_id
+            })
+        else:
+            if not os.path.exists(f"{runs_path}/{run_id}/checkpoint.pt"):
+                logger.info(f"Cleaning {runs_path}/{run_id} directory")
+                shutil.rmtree(f"{runs_path}/{run_id}")
+
+    best_runs = {}
+
+    for run in runs_list:
+        model = run['model']
+        test_acc = run['test_acc']
+        run_id = run['run_id']
+
+        if model not in best_runs or test_acc > best_runs[model]['test_acc']:
+            logger.info(f"New best run with id {run_id} for model {model}")
+            best_runs[model] = {'run_id': run_id, 'test_acc': test_acc}
+ 
+    with open(f"{best_run_path}", "w") as f:
+        json.dump(best_runs, f, indent=4)
     
     turnoff = int(args.turnoff)
     

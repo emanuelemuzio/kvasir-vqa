@@ -8,38 +8,19 @@ import argparse
 import json
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from common.util import ROOT, logger, generate_run_id, plot_run, check_run_type
+from common.util import ROOT, logger, generate_run_id, plot_run, check_run_type, save_multilabel_results, get_new_tokens
 from common.earlystop import EarlyStopper
-from vilt.data import Dataset_, get_config
+from clip.data import _Dataset as Dataset
 from dotenv import load_dotenv
 from torch import optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR, ExponentialLR, StepLR
 from sklearn.model_selection import train_test_split
-from transformers import ViltProcessor, ViltConfig, ViltForQuestionAnswering
+from transformers import CLIPModel, CLIPProcessor
 from sklearn.metrics import f1_score
 
 load_dotenv()      
 RANDOM_SEED = int(os.getenv('RANDOM_SEED'))
-processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-mlm")
-
-def collate_fn(batch):
-    input_ids = [item['input_ids'] for item in batch]
-    pixel_values = [item['pixel_values'] for item in batch]
-    attention_mask = [item['attention_mask'] for item in batch]
-    token_type_ids = [item['token_type_ids'] for item in batch]
-    labels = [torch.tensor(item['labels']) for item in batch]
-
-    encoding = processor.image_processor.pad(pixel_values, return_tensors="pt")
-
-    batch = {}
-    batch['input_ids'] = torch.stack(input_ids)
-    batch['attention_mask'] = torch.stack(attention_mask)
-    batch['token_type_ids'] = torch.stack(token_type_ids)
-    batch['pixel_values'] = encoding['pixel_values']
-    batch['pixel_mask'] = encoding['pixel_mask']
-    batch['labels'] = torch.stack(labels).float()
-
-    return batch
+torch_dtype = torch.float16
 
 def evaluate(
             model, 
@@ -60,8 +41,8 @@ def evaluate(
     
     logger.info('Starting model evaluation')
 
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
-    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
     
     train_loss = []
     val_loss = []
@@ -118,7 +99,7 @@ def evaluate(
                 'val_loss' : val_loss,
                 'val_acc' : val_acc,
                 'run_id' : run_id
-            }, f"{ROOT}/{os.getenv('VILT_RUNS')}/{run_id}/checkpoint.pt") 
+            }, f"{ROOT}/{os.getenv('CLIP_RUNS')}/{run_id}/checkpoint.pt") 
 
             logger.info('Checkpoint reached')
             
@@ -128,58 +109,20 @@ def evaluate(
             
     return train_loss, train_acc, val_loss, val_acc, best_weights
 
-
-
 def train(
     model,
-    train_dataset : Dataset_, 
+    train_dataset, 
     optimizer : torch.optim, 
-    device : str):
-    
-    '''
-    Train step function
-    
-    ----------
-    Parameters
-        model: Classifier
-            Classifier model
-        train_dataset: Dataset
-            Dataset object
-        optimizer: torch optimizer
-            Torch optimizer (Adam, SGD, AdamW)
-        answer_encoder: LabelEncoder
-            LabelEncoder fitted on metadata.csv answers
-        max_length: int
-            Tokenizer max length
-        tokenizer: AutoTokenizer
-            HuggingFace Tokenizer
-        question_encoder: AutoModel 
-            HuggingFace Model for word embeddings
-        feature_extractor: model
-            Sliced model for feature extraction
-        device: str
-            'cuda' or 'pc'
-        scheduler: torch scheduler/schedulers
-            either no scheduler or a list of (cosine annealing, linear, reduce lr on plateau) 
-    ----------
-
-    ------
-    Return
-        train_loss: list
-            training loss history
-        train_acc: list
-            training accuracy history
-    ------
-    '''
+    device : str): 
     
     model.train()
 
     train_loss = 0.0
     train_acc = 0.0
 
-    for batch in tqdm(train_dataset):
+    for batch in tqdm(train_dataset, desc='Training phase...'):
         
-        optimizer.zero_grad() 
+        optimizer.zero_grad()
         
         data = {k:v.to(device) for k,v in batch.items()}
         
@@ -190,10 +133,9 @@ def train(
         optimizer.step() 
         
         target = data['labels']
-        probs = torch.softmax(output['logits'], dim=1)
-        max_indices = torch.argmax(probs, dim=1)
-        pred = torch.zeros_like(probs)
-        pred[torch.arange(probs.size(0)), max_indices] = 1
+        pred = torch.sigmoid(output['logits'])
+        pred[pred >= 0.5] = 1
+        pred[pred < 0.5] = 0
         
         target = target.cpu().detach().numpy()
         pred = pred.cpu().detach().numpy()
@@ -211,7 +153,7 @@ def train(
 
 def val(
     model, 
-    val_dataset : Dataset_,  
+    val_dataset,  
     scheduler,
     device : str):
     
@@ -255,8 +197,8 @@ def val(
     val_acc = 0.0 
     
     with torch.no_grad():
-        for batch in tqdm(val_dataset): 
-            
+        for batch in tqdm(val_dataset, desc='Validation phase...'):
+        
             data = {k:v.to(device) for k,v in batch.items()}
             
             output = model(**data)
@@ -264,10 +206,9 @@ def val(
             loss = output.loss
              
             target = data['labels']
-            probs = torch.softmax(output['logits'], dim=1)
-            max_indices = torch.argmax(probs, dim=1)
-            pred = torch.zeros_like(probs)
-            pred[torch.arange(probs.size(0)), max_indices] = 1
+            pred = torch.sigmoid(output['logits'])
+            pred[pred >= 0.5] = 1
+            pred[pred < 0.5] = 0
             
             target = target.cpu().detach().numpy()
             pred = pred.cpu().detach().numpy()
@@ -279,10 +220,8 @@ def val(
             if device == 'cuda':
                 torch.cuda.empty_cache()
 
-        # Calculate validation loss
         val_loss /= len(val_dataset)
 
-        # Calculate validation accuracy
         val_acc /= len(val_dataset)
         
         for s in scheduler:
@@ -303,12 +242,12 @@ def predict(
     targets = []
         
     with torch.no_grad():
-        for batch in tqdm(dataset):
+        for batch in tqdm(dataset, desc='Test phase...'):
             input_ids = batch['input_ids'].unsqueeze(0)
             pixel_values = batch['pixel_values'].unsqueeze(0)
             attention_mask = batch['attention_mask'].unsqueeze(0)
             token_type_ids = batch['token_type_ids'].unsqueeze(0)
-            labels = batch['labels'].unsqueeze(0)
+            labels = torch.FloatTensor(batch['labels']).unsqueeze(0)
             
             encoding = processor.image_processor.pad(pixel_values, return_tensors="pt").to(device)
             
@@ -325,10 +264,9 @@ def predict(
             output = model(**data)
 
             target = data['labels']
-            probs = torch.softmax(output['logits'], dim=1)
-            max_indices = torch.argmax(probs, dim=1)
-            pred = torch.zeros_like(probs)
-            pred[torch.arange(probs.size(0)), max_indices] = 1
+            pred = torch.sigmoid(output['logits'])
+            pred[pred >= 0.5] = 1
+            pred[pred < 0.5] = 0
             
             target = target.squeeze().cpu().detach().tolist()
             pred = pred.squeeze().cpu().detach().tolist()
@@ -345,41 +283,41 @@ def predict(
     
 def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
-    config = ViltConfig.from_dict(get_config())
-    model = ViltForQuestionAnswering.from_pretrained("dandelin/vilt-b32-mlm",
-                                                 id2label=config.id2label,
-                                                 label2id=config.label2id)
+    model = CLIPModel.from_pretrained(
+        "openai/clip-vit-base-patch32",
+        device_map=device,
+        torch_dtype=torch_dtype,
+    )
     model.to(device)
+    processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+    
+    new_tokens = get_new_tokens(processor.tokenizer)
+    processor.tokenizer.add_tokens(new_tokens)
+    model.resize_token_embeddings(len(processor.tokenizer))
+    
+    print(f"Added {len(new_tokens)} new tokens to tokenizer")
     
     logger.info(f"Launching experiment with configuration: {args}")
     
-    use_aug = args.use_aug == '1'
-  
-    df = None
-    
     kvasir_vqa_datapath = f"{ROOT}/{os.getenv('KVASIR_VQA_DATA')}"
-    kvasir_vqa_datapath_aug = f"{ROOT}/{os.getenv('KVASIR_VQA_DATA_AUG')}"
-      
-    if use_aug:
-        df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_CSV_AUG')}")
-    else:
-        df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_CSV_CLEAN')}") 
+    
+    df = pd.read_csv(f"{ROOT}/{os.getenv('METADATA_MULTILABEL_CSV')}") 
     
     logger.info("Dataset retrieved")
         
     df.dropna(axis=0, inplace=True)
     
-    y_column = 'answer' 
+    x_columns = ['source', 'question', 'img_id']
+    y_columns = df.drop(x_columns, axis=1).columns
     
-    X = df.drop(y_column, axis=1)
-    Y = df[y_column]
+    X = df[x_columns]
+    Y = df[y_columns]
     
     logger.info("Splitting data")
 
     X_train, X_test, Y_train, Y_test = train_test_split(
         X, Y, 
         test_size=0.3, 
-        # stratify=Y, 
         random_state=RANDOM_SEED, 
         shuffle=True
     )
@@ -387,7 +325,6 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     X_test, X_val, Y_test, Y_val = train_test_split(
         X_test, Y_test, 
         test_size=0.5,   
-        # stratify=Y_test, 
         random_state=RANDOM_SEED, 
         shuffle=True
     )
@@ -401,38 +338,35 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
     logger.info('Building dataloaders...')
  
-    train_dataset = Dataset_(
+    train_dataset = Dataset(
         source=X_train['source'].to_numpy(), 
         question=X_train['question'].to_numpy(), 
-        answer=Y_train['answer'].to_numpy(), 
+        answer=Y_train[y_columns].to_numpy(), 
         img_id=X_train['img_id'].to_numpy(), 
         base_path=kvasir_vqa_datapath,
-        aug_path=kvasir_vqa_datapath_aug,
         processor=processor,
         config=config
     )
         
-    test_dataset = Dataset_(
+    test_dataset = Dataset(
         source=X_test['source'].to_numpy(), 
         question=X_test['question'].to_numpy(), 
-        answer=Y_test['answer'].to_numpy(), 
+        answer=Y_test[y_columns].to_numpy(), 
         img_id=X_test['img_id'].to_numpy(),
         base_path=kvasir_vqa_datapath,
-        aug_path=kvasir_vqa_datapath_aug,
         processor=processor,
         config=config
     )
     
-    val_dataset = Dataset_(
+    val_dataset = Dataset(
         source=X_val['source'].to_numpy(), 
         question=X_val['question'].to_numpy(), 
-        answer=Y_val['answer'].to_numpy(), 
+        answer=Y_val[y_columns].to_numpy(), 
         img_id=X_val['img_id'].to_numpy(), 
         base_path=kvasir_vqa_datapath,
-        aug_path=kvasir_vqa_datapath_aug,
         processor=processor,
         config=config
-    )
+    ) 
     
     if device == 'cuda':
         torch.compile(model, 'max-autotune')
@@ -523,9 +457,9 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
     if len(args.run_id) > 0:
         if delete_ckp:
-            if os.path.exists(f"{ROOT}/{os.getenv('VILT_RUNS')}/{args.run_id}/checkpoint.pt"):
-                os.remove(f"{ROOT}/{os.getenv('VILT_RUNS')}/{args.run_id}/checkpoint.pt") 
-        run_type = check_run_type(f"{ROOT}/{os.getenv('VILT_RUNS')}/{args.run_id}")
+            if os.path.exists(f"{ROOT}/{os.getenv('CLIP_RUNS')}/{args.run_id}/checkpoint.pt"):
+                os.remove(f"{ROOT}/{os.getenv('CLIP_RUNS')}/{args.run_id}/checkpoint.pt") 
+        run_type = check_run_type(f"{ROOT}/{os.getenv('CLIP_RUNS')}/{args.run_id}")
         if run_type != 1:
             run_id = args.run_id
         else:
@@ -547,7 +481,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     start_epoch = 1
     best_weights = None     
 
-    run_path = f"{ROOT}/{os.getenv('VILT_RUNS')}/{run_id}"
+    run_path = f"{ROOT}/{os.getenv('CLIP_RUNS')}/{run_id}"
     
     match run_type:
         case 1:
@@ -579,7 +513,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
             
         case 2:
             min_epochs = 0
-            checkpoint = torch.load(f"{ROOT}/{os.getenv('VILT_RUNS')}/{run_id}/checkpoint.pt", weights_only=False)
+            checkpoint = torch.load(f"{ROOT}/{os.getenv('CLIP_RUNS')}/{run_id}/checkpoint.pt", weights_only=False)
             model.load_state_dict(checkpoint['model_state_dict'])
             start_epoch = checkpoint['num_epochs']
             train_loss_ckp = checkpoint['train_loss']
@@ -587,7 +521,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
             val_loss_ckp = checkpoint['val_loss']
             val_acc_ckp = checkpoint['val_acc']
             run_id = checkpoint['run_id']
-            run_path = f"{ROOT}/{os.getenv('VILT_RUNS')}/{run_id}"
+            run_path = f"{ROOT}/{os.getenv('CLIP_RUNS')}/{run_id}"
             logger.info(f'Loaded run {run_id} checkpoint')
                 
             logger.info('Starting model evaluation')
@@ -614,11 +548,6 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
             torch.save(best_weights, f"{run_path}/model.pt")
             
         case 3:
-    
-            val_acc = checkpoint['val_acc']
-            val_loss = checkpoint['val_loss']
-            train_acc = checkpoint['train_acc']
-            train_loss = checkpoint['train_loss']
             best_weights = torch.load(f"{run_path}/model.pt", weights_only=True) 
         
     logger.info(f'Starting test phase')
@@ -632,27 +561,27 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         dataset=test_dataset
     )
     
-    f1_scoring = f1_score(y_true, y_pred, average=None).tolist()
-    f1_macro_score = f1_score(y_true, y_pred, average='macro')
+    del(model)
+    torch.cuda.empty_cache()    
     
-    columns = list(config.id2label.values())
+    labels = list(config.id2label.values())
     
-    pd.DataFrame({'Class': columns, 'F1-Score': f1_scoring}).to_csv(f"{run_path}/test_results.csv", index=False)
+    save_multilabel_results(y_true=y_true, y_pred=y_pred, labels=labels, path=run_path, run_id=run_id)
     
     logger.info("Saved test report")
     
-    with open(f"{run_path}/run.json", "w") as f:
-        config = vars(args)
-        config['train_loss'] = train_loss
-        config['val_loss'] = val_loss
-        config['train_acc'] = train_acc
-        config['val_acc'] = val_acc
-        config['run_id'] = run_id
-        config['test_acc'] = f1_macro_score
-        json.dump(config, f)
+    if run_type != 3:
+        with open(f"{run_path}/run.json", "w") as f:
+            config = vars(args)
+            config['train_loss'] = train_loss
+            config['val_loss'] = val_loss
+            config['train_acc'] = train_acc
+            config['val_acc'] = val_acc
+            config['run_id'] = run_id
+            json.dump(config, f)
 
-    os.remove(f"{run_path}/checkpoint.pt") 
+        os.remove(f"{run_path}/checkpoint.pt") 
 
-    plot_run(base_path=f"{ROOT}/{os.getenv('VILT_RUNS')}", run_id=run_id)
-    
-    logger.info("Run plotted and save to run.json file")
+        plot_run(base_path=f"{ROOT}/{os.getenv('CLIP_RUNS')}", run_id=run_id)
+        
+        logger.info("Run plotted and save to run.json file")

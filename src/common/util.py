@@ -402,8 +402,9 @@ def update_best_runs_v2(best_run_path='', runs_path=''):
                 "run_id" : run_id
             })
         else:
-            logger.info(f"Cleaning {runs_path}/{run_id} directory")
-            os.rmdir(f"{ROOT}/{runs_path}/{run_id}")
+            if not os.path.exists(f"{ROOT}/{runs_path}/{run_id}/checkpoint.pt"):
+                logger.info(f"Cleaning {runs_path}/{run_id} directory")
+                shutil.rmtree(f"{ROOT}/{runs_path}/{run_id}")
 
     best_runs = {}
 
@@ -580,8 +581,32 @@ def create_generative_report(question_list : list, candidate_list : list, refere
 def decorate_prompt(question : str, questions_map : str, strategy : str):
     
     prompt_strategies = {
-        "template-1" : "Answer the following question: <q> Options: <o>",
-        "cot-1" : " Q: <q> Options: <o>, A: Let’s think step-by-step"
+        "template-1" :
+            """
+                Based on the following question:
+                Question: <q>
+                Choose the correct answer from the available options:
+                Options: <o>
+                Please respond with exactly one of the options provided.
+            """
+        ,
+        "cot-1" : 
+            """
+                Q: <q>
+                Options: <o>
+                A: Let's think step-by-step.            
+            """,
+        "cot-2" : 
+            """
+                Q: <q>
+                Options: <o>
+                A: Let's think step-by-step.   
+                A: Let's break this down step-by-step:
+                1. What is the key information provided in the question?
+                2. How does this information relate to the available options?
+                3. Eliminate options that are not relevant.
+                4. Based on the analysis, the most appropriate answer is:
+            """
     }
     
     decorated_prompt = prompt_strategies[strategy].replace(

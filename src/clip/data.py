@@ -1,12 +1,9 @@
 import os
-from torchvision.io import read_image
 from torch.utils.data import Dataset
 import numpy as np
 import random
 from dotenv import load_dotenv
-import torch
-from torchvision.transforms import v2
-import pandas as pd
+import torch 
 from common.util import init_kvasir_vocab, init_kvasir_vocab_multilabel
 from PIL import Image
 
@@ -17,52 +14,8 @@ random.seed(RANDOM_SEED)
 torch.manual_seed(RANDOM_SEED)
 
 load_dotenv()  
-
-class Dataset_(Dataset):
     
-    def __init__(self, source=[], question=[], answer=[], img_id=[],  base_path='', aug_path='', processor=None, config=None):  
-        
-        self.source = source
-        self.question = question
-        self.answer = answer
-        self.img_id = img_id
-        self.base_path = base_path
-        self.aug_path = aug_path 
-        self.processor = processor
-        self.config = config
-         
-    def __len__(self):
-        return len(self.source)
-
-    def __getitem__(self, idx):
-        
-        question = self.question[idx]
-        answer = self.answer[idx]
-        img_id = self.img_id[idx]
-        
-        full_path = f"{self.aug_path}/{img_id}.jpg" if 'aug' in img_id else f"{self.base_path}/{img_id}.jpg" 
-        img = Image.open(full_path)
-
-        encoding = self.processor(
-            images=img,
-            text=question,
-            padding="max_length",   
-            truncation=True,    
-            return_tensors="pt"  
-        ) 
-        
-        for k,v in encoding.items():
-          encoding[k] = v.squeeze()
-        
-        encoding['answer'] = answer
-        
-        targets = torch.zeros(len(self.config.id2label))
-        targets[self.config.label2id[answer]] = 1 
-        encoding["labels"] = targets
-
-        return encoding
-    
-class MultilabelDataset(Dataset): 
+class _Dataset(Dataset): 
     
     def __init__(self, source=[], question=[], answer=[], img_id=[],  base_path='', processor=None, config=None):  
         
@@ -83,21 +36,18 @@ class MultilabelDataset(Dataset):
         answer = self.answer[idx]
         img_id = self.img_id[idx]
         
-        full_path = f"{self.aug_path}/{img_id}.jpg" if 'aug' in img_id else f"{self.base_path}/{img_id}.jpg" 
+        full_path = f"{self.base_path}/{img_id}.jpg" 
         img = Image.open(full_path)
 
         encoding = self.processor(
+            text=answer,
             images=img,
-            text=question,
-            padding="max_length",   
-            truncation=True,    
+            padding="max_length",
             return_tensors="pt"  
         ) 
         
-        for k,v in encoding.items():
-          encoding[k] = v.squeeze()
-        
-        encoding['labels'] = answer
+        encoding['answer'] = answer
+        encoding['question'] = question
         
         return encoding
     
