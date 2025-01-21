@@ -493,8 +493,6 @@ def calculate_cider(candidate, reference):
 
     score, _ = cider_scorer.compute_score(references, candidates)
 
-    print(f"CIDEr score: {score}")
-    
     return score
 
 def check_run_type(run_path : str) -> int:
@@ -607,11 +605,21 @@ def decorate_prompt(question : str, questions_map : str, strategy : str):
     prompt_strategies = {
         "template-1" :
             """
-                Based on the following question:
+                You are given the following question:
                 Question: <q>
-                Choose the correct answer from the available options:
+                Below are the possible options:
                 Options: <o>
-                Please respond with exactly one of the options provided.
+                Respond using only the options provided. If multiple options apply, separate them with a semicolon (';').
+            """
+        ,
+        "template-2" :
+            """
+                Based on the following question:  
+                Question: <q>  
+                Choose the most appropriate answer(s) from the provided options:  
+                Options: <o>  
+                Please respond using one or more of the options, separated by a semicolon (';'), if applicable.  
+                Answer:  
             """
         ,
         "cot-1" : 
@@ -622,14 +630,14 @@ def decorate_prompt(question : str, questions_map : str, strategy : str):
             """,
         "cot-2" : 
             """
-                Q: <q>
-                Options: <o>
-                A: Let's think step-by-step.   
-                A: Let's break this down step-by-step:
-                1. What is the key information provided in the question?
-                2. How does this information relate to the available options?
-                3. Eliminate options that are not relevant.
-                4. Based on the analysis, the most appropriate answer is:
+                Q: <q>  
+                Options: <o>  
+                A: Let's think step-by-step.  
+                1. First, identify the key information in the question.  
+                2. Next, relate this information to the available options.  
+                3. Eliminate any options that do not align with the question.  
+                4. Finally, based on the analysis, respond with the most appropriate option(s), separated by a semicolon (';') if multiple answers apply.  
+                Answer:  
             """
     }
     

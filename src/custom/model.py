@@ -12,8 +12,7 @@ from sklearn.preprocessing import LabelEncoder
 from transformers import AutoTokenizer, AutoModel
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from common.util import ROOT, logger, get_run_info, generate_run_id, plot_run
-from common.prompting import PromptTuning
+from common.util import ROOT, logger, get_run_info, generate_run_id, plot_run, check_run_type
 from torcheval.metrics.functional import multiclass_accuracy
 from common.earlystop import EarlyStopper
 from custom.architecture import HadamardClassifier, ConcatClassifier, ConvVQA, BiggerConvVQA
@@ -22,47 +21,21 @@ from dotenv import load_dotenv
 from question_encode.model import get_tokenizer, get_language_model
 from feature_extractor.model import init
 from torch.nn import CrossEntropyLoss
-from sklearn.metrics import classification_report
+from sklearn.metrics import f1_score
 from torch import optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, LinearLR, ExponentialLR, StepLR
 from sklearn.model_selection import train_test_split
-from matplotlib import pyplot as plt
+import torch.nn.functional as F
 
 load_dotenv()      
 RANDOM_SEED = int(os.getenv('RANDOM_SEED'))
     
-    
-    
 def get_classifier(feature_extractor_name=None, vocabulary_size=0, architecture=None, inference=False):
-    
-    '''
-    Classifier initialization function
-    
-    Parameters
-    ------------------
-        feature_extractor_name: str
-            Used for choosing the CNN base model for the feature extraction
-        vocabulary_size: int
-            Num. of answers that the classifier knows
-        architecture: str
-            Based on the named architecture, a different model will be used
-        inference: bool
-            True for prompt tuner instantiation, else False
-    ------------------
-    
-    Return
-    ------
-        classifier: Classifier
-            Initialized classifier model
-    ------
-    '''
-    
-    prompt_tuner = PromptTuning(os.getenv('PROMPT_TUNING_MODEL')) if inference else None
     
     question_embedding_dim = int(os.getenv('EMBEDDING_DIM'))
     image_feature_dim = -1
     
-    intermediate_dim = int(os.getenv('CLASSIFIER_INTERMEDIATE_DIM'))
+    intermediate_dim = int(os.getenv('CUSTOM_INTERMEDIATE_DIM'))
     
     if feature_extractor_name.startswith('resnet'):
         image_feature_dim = int(os.getenv('RESNET_FEATURE_SIZE'))
@@ -79,7 +52,6 @@ def get_classifier(feature_extractor_name=None, vocabulary_size=0, architecture=
         question_embedding_dim=question_embedding_dim,
         image_feature_dim=image_feature_dim,
         intermediate_dim=intermediate_dim,
-        prompt_tuner=prompt_tuner
         )
     elif architecture == 'concat':
         classifier = ConcatClassifier(
@@ -87,7 +59,6 @@ def get_classifier(feature_extractor_name=None, vocabulary_size=0, architecture=
         question_embedding_dim=question_embedding_dim,
         image_feature_dim=image_feature_dim,
         intermediate_dim=intermediate_dim,
-        prompt_tuner=prompt_tuner
         )
     elif architecture == 'conv':
         classifier = ConvVQA(
@@ -105,7 +76,7 @@ def get_classifier(feature_extractor_name=None, vocabulary_size=0, architecture=
 
 
 def evaluate(
-            model : ConcatClassifier|HadamardClassifier, 
+            model, 
             num_epochs : int, 
             batch_size : int, 
             optimizer : torch.optim, 
@@ -126,64 +97,6 @@ def evaluate(
             val_acc_ckp = [],
             start_epoch = 1,
             run_id='test'):
-    
-    '''
-    Evaluation function for the classifier, which includes both 
-    the train step and the validation step for each epoch.
-    
-    ----------
-    Parameters
-        model: Classifier
-            Classifier model
-        num_epochs: int
-            max epochs for evaluation
-        batch_size: int
-            Numerical batch size
-        optimizer: torch optimizer
-            Torch optimizer (Adam, SGD, AdamW)
-        scheduler: torch scheduler/schedulers
-            either no scheduler or a list of (cosine annealing, linear, reduce lr on plateau)
-        device: str
-            'cuda' or 'pc'
-        train_dataset/val_dataset: torch Dataset
-            Dataset objects, used for creating torch DataLoaders
-        criterion: torch loss
-            Torch Loss object, in this case Cross Entropy Loss
-        early_stopper: EarlyStopper
-            EarlyStopper object for interrupting evaluation early 
-        answer_encoder: LabelEncoder
-            LabelEncoder fitted on the answers contained in the metadata.csv
-        max_length: int
-            Max tokenizer length
-        tokenizer: AutoTokenizer    
-            HuggingFace AutoTokenizer
-        feature_extractor: 
-            Base Net used for the feature extraction
-        question_encoder: AutoModel
-            HuggingFace AutoModel for word embeddings
-        *_ckp: list
-            in case of interrupted evaluation (recovered from checkpoint), validation and 
-            training history will be passed as parameters
-        start_epoch: int
-            starting epoch (1 or N, depends on when last evaluation was interrupted)
-        run_id: str
-            Run identifier, the purpose is identifying the correct folder for storing data
-    ----------
-
-    ------
-    Return
-        train_loss: list
-            training loss history
-        train_acc: list
-            training accuracy history
-        val_loss: list
-            validation loss history
-        val_acc:
-            validation accuracy history
-        best_weights:
-            dict state of best epoch
-    ------
-    '''
     
     logger.info('Starting model evaluation')
 
@@ -220,8 +133,7 @@ def evaluate(
             tokenizer,
             question_encoder,
             feature_extractor,
-            device, 
-            scheduler
+            device
         )
         
         train_loss.append(epoch_train_loss)
@@ -236,7 +148,8 @@ def evaluate(
             question_encoder,
             tokenizer,
             feature_extractor, 
-            device
+            device,
+            scheduler
         )
         
         val_loss.append(epoch_val_loss)
@@ -257,7 +170,7 @@ def evaluate(
                 'val_loss' : val_loss,
                 'val_acc' : val_acc,
                 'run_id' : run_id
-            }, f"{ROOT}/{os.getenv('CLASSIFIER_CHECKPOINT')}") 
+            }, f"{ROOT}/{os.getenv('CUSTOM_CHECKPOINT')}") 
 
             logger.info('Checkpoint reached')
             
@@ -279,8 +192,7 @@ def train(
     tokenizer : AutoTokenizer,
     question_encoder : AutoModel,
     feature_extractor,
-    device : str, 
-    scheduler : list):
+    device : str ):
     
     '''
     Train step function
@@ -325,7 +237,7 @@ def train(
     train_loss = 0.0
     train_acc = 0.0
 
-    for i, (img, question, answer) in enumerate(train_dataset):
+    for i, (img, question, answer) in tqdm(enumerate(train_dataset)):
         
         optimizer.zero_grad() 
         
@@ -347,11 +259,13 @@ def train(
         
         image_feature = feature_extractor(img).squeeze()
         
-        output = model(word_embeddings, image_feature)
+        logits = model(word_embeddings, image_feature)
+        
+        output = F.softmax(logits)
         
         target = (torch.tensor(answer_encoder.transform(answer))).to(device)
 
-        loss = criterion(output, target)
+        loss = criterion(logits, target)
         loss.backward()
         optimizer.step() 
         
@@ -362,9 +276,6 @@ def train(
         if device == 'cuda':
             torch.cuda.empty_cache()
 
-    for s in scheduler:
-        s.step()
-
     train_loss = train_loss / len(train_dataset)
     train_acc = train_acc / len(train_dataset)
 
@@ -373,7 +284,7 @@ def train(
 
 
 def val(
-    model : ConcatClassifier|HadamardClassifier, 
+    model, 
     val_dataset : Dataset_, 
     criterion : torch.nn,  
     answer_encoder : LabelEncoder, 
@@ -381,43 +292,8 @@ def val(
     question_encoder : AutoModel,
     tokenizer : AutoTokenizer,
     feature_extractor,
-    device : str):
-    
-    '''
-    Validation step function
-    
-    ----------
-    Parameters
-        model: Classifier
-            Classifier model
-        val_dataset: torch Dataset
-            Dataset object
-        criterion: torch loss
-            Torch Loss object, in this case Cross Entropy Loss
-        optimizer: torch optimizer
-            Torch optimizer (Adam, SGD, AdamW)
-        answer_encoder: LabelEncoder
-            LabelEncoder fitted on metadata.csv answers
-        max_length: int
-            Tokenizer max length
-        question_encoder: AutoModel 
-            HuggingFace Model for word embeddings
-        tokenizer: AutoTokenizer
-            HuggingFace Tokenizer
-        feature_extractor: model
-            Sliced model for feature extraction
-        device: str
-            'cuda' or 'pc'
-    ----------
-
-    ------
-    Return
-        train_loss: list
-            training loss history
-        train_acc: list
-            training accuracy history
-    ------
-    '''
+    device : str,
+    scheduler : list):
     
     # Evaluate the model on the validation set
     model.eval()
@@ -445,11 +321,13 @@ def val(
             
             image_feature = feature_extractor(img).squeeze()
             
-            output = model(word_embeddings, image_feature) 
+            logits = model(word_embeddings, image_feature)
+        
+            output = F.softmax(logits)
             
             target = (torch.tensor(answer_encoder.transform(answer))).to(device)
-            
-            loss = criterion(output, target)
+
+            loss = criterion(logits, target)
             
             acc = multiclass_accuracy(output, target)
             val_acc += acc.item()
@@ -464,6 +342,9 @@ def val(
 
         # Calculate validation accuracy
         val_acc = val_acc / len(val_dataset) 
+        
+        for s in scheduler:
+            s.step(val_loss)
 
         return val_loss, val_acc 
     
@@ -480,8 +361,9 @@ def predict(
     
     model.eval()
     
+    questions = []
     predictions = []
-    target = []
+    targets = []
         
     with torch.no_grad():
         for i, (img, question, answer) in enumerate(dataset):
@@ -504,15 +386,20 @@ def predict(
             
             image_feature = feature_extractor(img).squeeze(3).squeeze(-1)
             
-            output = model(word_embeddings, image_feature).detach().cpu().tolist()
+            logits = model(word_embeddings, image_feature)
+        
+            output = F.softmax(logits)
             
-            predictions.append(output)
-            target.append(answer_encoder.transform([answer])[0])            
+            target = (torch.tensor(answer_encoder.transform([answer]))).item()
+
+            predictions.append(torch.argmax(output).item())
+            targets.append(target)  
+            questions.append(question)          
         
             if device == 'cuda':
                 torch.cuda.empty_cache()
                 
-    return predictions, target
+    return questions, predictions, targets
     
     
 def launch_experiment(args : argparse.Namespace, device: str) -> None:
@@ -522,7 +409,6 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     feature_extractor_run_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{args.feature_extractor}/run.json"
     feature_extractor_weights_path = f"{ROOT}/{os.getenv('FEATURE_EXTRACTOR_RUNS')}/{args.feature_extractor}/model.pt"
     
-    prompting = args.prompting == '1'
     use_aug = args.use_aug == '1'
     
     feature_extractor_name = get_run_info(run_path=feature_extractor_run_path)['model'] 
@@ -538,16 +424,10 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     kvasir_vqa_datapath = f"{ROOT}/{os.getenv('KVASIR_VQA_DATA')}"
     kvasir_vqa_datapath_aug = f"{ROOT}/{os.getenv('KVASIR_VQA_DATA_AUG')}"
     
-    if prompting:
-        if use_aug:
-            df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_PROMPT_CSV_AUG')}")
-        else:
-            df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_PROMPT_CSV')}")
+    if use_aug:
+        df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_CSV_AUG')}")
     else:
-        if use_aug:
-            df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_CSV_AUG')}")
-        else:
-            df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_CSV')}") 
+        df = pd.read_csv(f"{ROOT}/{os.getenv('KVASIR_VQA_CSV_CLEAN')}") 
     
     logger.info("Dataset retrieved")
         
@@ -564,7 +444,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
 
     X_train, X_test, Y_train, Y_test = train_test_split(
         X, Y, 
-        test_size=0.4, 
+        test_size=0.3, 
         stratify=Y, 
         random_state=RANDOM_SEED, 
         shuffle=True
@@ -577,7 +457,6 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         random_state=RANDOM_SEED, 
         shuffle=True
     )
-
     
     X_train = X_train.reset_index()
     Y_train = Y_train.reset_index()
@@ -614,11 +493,6 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         base_path=kvasir_vqa_datapath,
         aug_path=kvasir_vqa_datapath_aug
     )
-    
-    if prompting: 
-        train_dataset.add_prompts(X_train['prompt'])
-        test_dataset.add_prompts(X_test['prompt'])
-        val_dataset.add_prompts(X_val['prompt'])
     
     answers = list(set(df['answer']))
     
@@ -662,33 +536,9 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
 
     patience = int(args.patience) or 5
     min_delta = float(args.min_delta) or 0.01
-        
+    step_size = int(args.step_size) or None
+    gamma = float(args.gamma) or None
     max_length = int(os.getenv('MAX_QUESTION_LENGTH'))
-
-    train_loss_ckp = None
-    train_acc_ckp = None
-    val_loss_ckp = None
-    val_acc_ckp = None
-    start_epoch = 1
-
-    run_path = None 
-    
-    if os.path.exists(f"{ROOT}/{os.getenv('CLASSIFIER_CHECKPOINT')}"):
-        min_epochs = 0
-        checkpoint = torch.load(f"{ROOT}/{os.getenv('CLASSIFIER_CHECKPOINT')}", weights_only=True)
-        model.load_state_dict(checkpoint['model_state_dict'])
-        start_epoch = checkpoint['num_epochs']
-        train_loss_ckp = checkpoint['train_loss']
-        train_acc_ckp = checkpoint['train_acc']
-        val_loss_ckp = checkpoint['val_loss']
-        val_acc_ckp = checkpoint['val_acc']
-        run_id = checkpoint['run_id']
-        run_path = f"{ROOT}/{os.getenv('CLASSIFIER_RUNS')}/{run_id}"
-        logger.info(f'Loaded run {run_id} checkpoint')
-    else:
-        logger.info(f'New run: {run_id}')
-        run_path = f"{ROOT}/{os.getenv('CLASSIFIER_RUNS')}/{run_id}"
-        os.mkdir(run_path)
         
     # Define optimizer, scheduler and early stop
 
@@ -717,44 +567,154 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         elif name == 'linear':
             scheduler.append(LinearLR(optimizer=optimizer))
         elif name == 'exponential':
-            scheduler.append(ExponentialLR(optimizer=optimizer, gamma=0.9, last_epoch=-1, verbose=False))
+            scheduler.append(ExponentialLR(optimizer=optimizer, gamma=gamma, last_epoch=-1, verbose=False))
         elif name == 'step':
-            scheduler.append(StepLR(optimizer, step_size=15, gamma=0.1))
+            scheduler.append(StepLR(optimizer, step_size=step_size, gamma=gamma))
+            
+    '''
+    1: Generate new run_id and run folder
+    2: Recover from existing checkpoint, finish training and run tests
+    3: Use existing run_id, the run folder contains only the model.pt file, run tests for it
+    '''
+    
+    run_type = None
+    run_id = None
+    delete_ckp = args.delete_ckp == "1"
+    
+    '''
+    <> args.run_id is not empty:
+        <> the run_id is valid and the folder exists:
+            <> the folder contains a checkpoint.pt file:
+                - the training continues -> 2
+            <> the folder doesnt contain a checkpoint.pt:
+                <> the folder contains a model.pt file:
+                    - only run tests -> 3
+                <> the folder doesnt contain neither checkpoint nor model:
+                    - delete folder, create new one for train and then tests -> 1
+        <> the run_id is invalid, the folder doesnt exist:
+            - create new folder for train and tests -> 1
+    <> args.run_id is empty:
+        - generate new id and create new folder -> 1
+    '''
+    
+    if len(args.run_id) > 0:
+        if delete_ckp:
+            if os.path.exists(f"{ROOT}/{os.getenv('CUSTOM_RUNS')}/{args.run_id}/checkpoint.pt"):
+                os.remove(f"{ROOT}/{os.getenv('CUSTOM_RUNS')}/{args.run_id}/checkpoint.pt") 
+        run_type = check_run_type(f"{ROOT}/{os.getenv('CUSTOM_RUNS')}/{args.run_id}")
+        if run_type != 1:
+            run_id = args.run_id
+        else:
+            logger.info("Generating run id")
+            run_id = generate_run_id()
+    else:
+        logger.info("Generating run id")
+        run_id = generate_run_id()
+        run_type = 1
+                
+    train_loss = None
+    train_acc = None
+    val_loss = None
+    val_acc = None
+    train_loss_ckp = None
+    train_acc_ckp = None
+    val_loss_ckp = None
+    val_acc_ckp = None
+    start_epoch = 1
+    best_weights = None     
 
-    logger.info('Starting model evaluation')
+    run_path = f"{ROOT}/{os.getenv('CUSTOM_RUNS')}/{run_id}"
+    
+    match run_type:
+        case 1:
+            logger.info(f'New run: {run_id}')
+            os.mkdir(run_path)
+    
+            logger.info('Starting model evaluation')
+        
+            train_loss, train_acc, val_loss, val_acc, best_weights = evaluate(
+                model=model, 
+                num_epochs=num_epochs, 
+                batch_size=batch_size,
+                optimizer=optimizer, 
+                scheduler=scheduler,
+                device=device, 
+                train_dataset=train_dataset, 
+                val_dataset=val_dataset, 
+                criterion=criterion, 
+                early_stopper=early_stopper, 
+                answer_encoder=answer_encoder,
+                max_length=max_length,
+                tokenizer=tokenizer,
+                feature_extractor=feature_extractor,
+                question_encoder=question_encoder,
+                train_loss_ckp = train_loss_ckp,
+                train_acc_ckp = train_acc_ckp,
+                val_loss_ckp = val_loss_ckp,
+                val_acc_ckp = val_acc_ckp,
+                start_epoch = start_epoch,
+                run_id=run_id)
+                
+            logger.info(f'Evaluation ended in {len(train_loss)} epochs')
+                
+            torch.save(best_weights, f"{run_path}/model.pt")
+            
+        case 2:
+            min_epochs = 0
+            checkpoint = torch.load(f"{ROOT}/{os.getenv('CUSTOM_RUNS')}/{run_id}/checkpoint.pt", weights_only=False)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            start_epoch = checkpoint['num_epochs']
+            train_loss_ckp = checkpoint['train_loss']
+            train_acc_ckp = checkpoint['train_acc']
+            val_loss_ckp = checkpoint['val_loss']
+            val_acc_ckp = checkpoint['val_acc']
+            run_id = checkpoint['run_id']
+            run_path = f"{ROOT}/{os.getenv('CUSTOM_RUNS')}/{run_id}"
+            logger.info(f'Loaded run {run_id} checkpoint')
+                
+            logger.info('Starting model evaluation')
+        
+            train_loss, train_acc, val_loss, val_acc, best_weights = evaluate(
+                model=model, 
+                num_epochs=num_epochs, 
+                batch_size=batch_size,
+                optimizer=optimizer, 
+                scheduler=scheduler,
+                device=device, 
+                train_dataset=train_dataset, 
+                val_dataset=val_dataset, 
+                criterion=criterion, 
+                early_stopper=early_stopper, 
+                answer_encoder=answer_encoder,
+                max_length=max_length,
+                tokenizer=tokenizer,
+                feature_extractor=feature_extractor,
+                question_encoder=question_encoder,
+                train_loss_ckp = train_loss_ckp,
+                train_acc_ckp = train_acc_ckp,
+                val_loss_ckp = val_loss_ckp,
+                val_acc_ckp = val_acc_ckp,
+                start_epoch = start_epoch,
+                run_id=run_id)
+                
+            logger.info(f'Evaluation ended in {len(train_loss)} epochs')
+                
+            torch.save(best_weights, f"{run_path}/model.pt")
+            
+        case 3: 
+            val_acc = checkpoint['val_acc']
+            val_loss = checkpoint['val_loss']
+            train_acc = checkpoint['train_acc']
+            train_loss = checkpoint['train_loss']
+            best_weights = torch.load(f"{run_path}/model.pt", weights_only=True) 
 
-    train_loss, train_acc, val_loss, val_acc, best_weights = evaluate(
-        model=model, 
-        num_epochs=num_epochs, 
-        batch_size=batch_size,
-        optimizer=optimizer, 
-        scheduler=scheduler,
-        device=device, 
-        train_dataset=train_dataset, 
-        val_dataset=val_dataset, 
-        criterion=criterion, 
-        early_stopper=early_stopper, 
-        answer_encoder=answer_encoder,
-        max_length=max_length,
-        tokenizer=tokenizer,
-        feature_extractor=feature_extractor,
-        question_encoder=question_encoder,
-        train_loss_ckp = train_loss_ckp,
-        train_acc_ckp = train_acc_ckp,
-        val_loss_ckp = val_loss_ckp,
-        val_acc_ckp = val_acc_ckp,
-        start_epoch = start_epoch,
-        run_id=run_id)
-    
-    logger.info(f'Evaluation ended in {len(train_loss)} epochs')
-    
-    torch.save(best_weights, f"{run_path}/model.pt")
-    
+    logger.info('Starting model evaluation') 
+      
     logger.info(f'Starting test phase')
     
     model.load_state_dict(best_weights)
     
-    predictions, target = predict(
+    question_list, y_pred, y_true = predict(
         model=model, 
         device=device,
         dataset=test_dataset,
@@ -765,33 +725,15 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         answer_encoder=answer_encoder
     )
     
-    test_acc = None
+    f1_scoring = f1_score(y_true, y_pred, average=None).tolist()
+    f1_macro_score = f1_score(y_true, y_pred, average='macro')
     
-    y_true = []
-    y_pred = []
+    columns = answers
     
-    for pred, t in zip(predictions, target):
-        y_pred.append(int(np.argmax(pred)))
-        y_true.append(t.item())
-        
-    fig, ax = plt.subplots(nrows=1, ncols=1)
-        
-    cr = classification_report(y_true=y_true, y_pred=y_pred, target_names=answers, output_dict=True)
-    
-    test_acc = cr['macro avg']['f1-score']
-    
-    cr = pd.DataFrame(cr).iloc[:-1, :].T
-    
-    cr.to_csv(f"{run_path}/cr.csv")
+    pd.DataFrame({'Class': columns, 'F1-Score': f1_scoring}).to_csv(f"{run_path}/test_results.csv", index=False)
     
     logger.info("Saved test report")
     
-    sns.heatmap(cr, annot=True, ax=ax).get_figure()
-    
-    fig.savefig(f"{run_path}/cr.png")
-    
-    plt.close()
-
     with open(f"{run_path}/run.json", "w") as f:
         config = vars(args)
         config['train_loss'] = train_loss
@@ -799,11 +741,11 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         config['train_acc'] = train_acc
         config['val_acc'] = val_acc
         config['run_id'] = run_id
-        config['test_acc'] = test_acc
+        config['test_acc'] = f1_macro_score
         json.dump(config, f)
 
-    os.remove(f"{ROOT}/{os.getenv('CLASSIFIER_CHECKPOINT')}") 
+    os.remove(f"{run_path}/checkpoint.pt") 
 
-    plot_run(base_path=f"{ROOT}/{os.getenv('CLASSIFIER_RUNS')}", run_id=run_id)
+    plot_run(base_path=f"{ROOT}/{os.getenv('CUSTOM_RUNS')}", run_id=run_id)
     
     logger.info("Run plotted and save to run.json file")

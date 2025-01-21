@@ -124,6 +124,9 @@ def train(
         
         optimizer.zero_grad()
         
+        encoding = batch['encoding']
+        answer = batch['answer']
+        
         data = {k:v.to(device) for k,v in batch.items()}
         
         output = model(**data)
@@ -285,17 +288,16 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
     model = CLIPModel.from_pretrained(
         "openai/clip-vit-base-patch32",
-        device_map=device,
+        device_map="auto",
         torch_dtype=torch_dtype,
     )
-    model.to(device)
     processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
     
-    new_tokens = get_new_tokens(processor.tokenizer)
-    processor.tokenizer.add_tokens(new_tokens)
-    model.resize_token_embeddings(len(processor.tokenizer))
+    # new_tokens = get_new_tokens(processor.tokenizer)
+    # processor.tokenizer.add_tokens(new_tokens)
+    # model.resize_token_embeddings(len(processor.tokenizer))
     
-    print(f"Added {len(new_tokens)} new tokens to tokenizer")
+    # print(f"Added {len(new_tokens)} new tokens to tokenizer")
     
     logger.info(f"Launching experiment with configuration: {args}")
     
@@ -345,7 +347,6 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         img_id=X_train['img_id'].to_numpy(), 
         base_path=kvasir_vqa_datapath,
         processor=processor,
-        config=config
     )
         
     test_dataset = Dataset(
@@ -355,7 +356,6 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         img_id=X_test['img_id'].to_numpy(),
         base_path=kvasir_vqa_datapath,
         processor=processor,
-        config=config
     )
     
     val_dataset = Dataset(
@@ -365,7 +365,6 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
         img_id=X_val['img_id'].to_numpy(), 
         base_path=kvasir_vqa_datapath,
         processor=processor,
-        config=config
     ) 
     
     if device == 'cuda':

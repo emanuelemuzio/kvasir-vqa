@@ -38,9 +38,9 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "--architecture=multilabel",
+                "--architecture=concat",
                 "--turnoff=-1",
-                "--num_epochs=100",
+                "--num_epochs=1",
                 "--batch_size=8",
                 "--lr=0.00001",
                 "--momentum=0.9",
@@ -48,18 +48,17 @@
                 "--eta_min=0.001",
                 "--patience=10",
                 "--min_delta=0.001",
-                "--scheduler=cosine,plateau",
+                "--scheduler=plateau",
                 "--optimizer=adamw",
                 "--mode=min",
                 "--weight_decay=0.01",
                 "--feature_extractor=13122024010744",
                 "--prompting=0",
-                "--run_all=0",
                 "--delete_ckp=0",
                 "--min_epochs=20",
                 "--use_best_fe=1",
-                "--use_aug=0",
-                "--format=multilabel",
+                "--use_aug=1",
+                "--format=",
                 "--step_size=-1",
                 "--gamma=0.001",
                 "--run_id=",
@@ -77,7 +76,7 @@
                 "--turnoff=-1",
                 "--prompting=template-1"
             ]
-        },
+        }, 
         {
             "name": "GIT",
             "type": "debugpy",
@@ -97,11 +96,11 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "--model=git",
+                "--model=llava",
                 "--turnoff=-1",
                 "--prompting=template-1"
             ]
-        },
+        }, 
         {
             "name": "ViLT",
             "type": "debugpy",
@@ -131,36 +130,6 @@
                 "--use_aug=1",
                 "--run_id=",
                 "--model_mode="
-            ]
-        },
-        {
-            "name": "CLIP",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal",
-            "args": [
-                "--model=clip",
-                "--turnoff=-1",
-                "--num_epochs=50",
-                "--batch_size=8",
-                "--lr=0.00004",
-                "--momentum=0.9",
-                "--T_max=100",
-                "--eta_min=0.001",
-                "--patience=5",
-                "--min_delta=0.001",
-                "--scheduler=plateau",
-                "--optimizer=adamw",
-                "--mode=min",
-                "--weight_decay=0.01",
-                "--step_size=10",
-                "--gamma=0.00001",
-                "--prompting=0",
-                "--delete_ckp=1",
-                "--min_epochs=5",
-                "--use_aug=1",
-                "--run_id="
             ]
         },
         {

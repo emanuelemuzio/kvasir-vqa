@@ -116,36 +116,32 @@ class ConcatClassifier(nn.Module):
         vocabulary_size : int,
         question_embedding_dim : int,
         image_feature_dim : int,
-        prompt_tuner : PromptTuning,
         intermediate_dim=512):
         
-        super(ConcatClassifier, self).__init__() 
+        super(ConcatClassifier, self).__init__()  
         
-        self.prompt_tuner = prompt_tuner
-        
-        self.multimodal_fusion = nn.Sequential(
-            nn.Linear(image_feature_dim + question_embedding_dim, intermediate_dim),
-            nn.ReLU(),
-            nn.Dropout(0.5)
-        )
-        
-        self.classifier = nn.Sequential(
-            nn.Linear(intermediate_dim, vocabulary_size),
-            nn.Sigmoid()
-        )
+        self.linear1 = nn.Linear(image_feature_dim + question_embedding_dim, intermediate_dim)
+        self.linearq = nn.Linear(question_embedding_dim, intermediate_dim)
+        self.linearv = nn.Linear(image_feature_dim, intermediate_dim)
+        self.classifier = nn.Linear(intermediate_dim, vocabulary_size)
         
     def tune_question(self, question : str):
         return self.prompt_tuner.generate(question=question)[0]
         
     def forward(self, encoded_question, feature_vector): 
         
-        concat = torch.cat((encoded_question, feature_vector), dim=1)
+        a = F.relu(torch.cat((encoded_question, feature_vector), dim=1))
         
-        fusion = self.multimodal_fusion(concat)
+        a = F.softmax(self.linear1(a))
+
+        fv = F.relu(self.linearv(feature_vector))
+        fq = F.relu(self.linearq(encoded_question))        
         
-        logits = self.classifier(fusion)
+        h = torch.mul(fv, fq)
         
-        return logits
+        h = self.classifier(h)
+        
+        return h
     
 class ConvVQA(nn.Module):
     def __init__(self, 
