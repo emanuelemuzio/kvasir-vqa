@@ -120,9 +120,10 @@ class ConcatClassifier(nn.Module):
         
         super(ConcatClassifier, self).__init__()  
         
-        self.linear1 = nn.Linear(image_feature_dim + question_embedding_dim, intermediate_dim)
+        self.linear1 = nn.Linear(image_feature_dim + question_embedding_dim, image_feature_dim)
         self.linearq = nn.Linear(question_embedding_dim, intermediate_dim)
         self.linearv = nn.Linear(image_feature_dim, intermediate_dim)
+        self.dropout = nn.Dropout(0.3)
         self.classifier = nn.Linear(intermediate_dim, vocabulary_size)
         
     def tune_question(self, question : str):
@@ -133,11 +134,15 @@ class ConcatClassifier(nn.Module):
         a = F.relu(torch.cat((encoded_question, feature_vector), dim=1))
         
         a = F.softmax(self.linear1(a))
+        
+        v = torch.mul(a, feature_vector)
 
-        fv = F.relu(self.linearv(feature_vector))
+        fv = F.relu(self.linearv(v))
         fq = F.relu(self.linearq(encoded_question))        
         
         h = torch.mul(fv, fq)
+        
+        h = self.dropout(h)
         
         h = self.classifier(h)
         
