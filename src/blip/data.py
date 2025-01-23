@@ -48,7 +48,7 @@ class Dataset_(Dataset):
     ------
     '''
     
-    def __init__(self, source=[], question=[], answer=[], img_id=[],  base_path='', processor=None):  
+    def __init__(self, source=[], question=[], prompted_question=[], answer=[], img_id=[],  base_path='', processor=None):  
         
         self.source = source
         self.question = question
@@ -56,6 +56,7 @@ class Dataset_(Dataset):
         self.img_id = img_id
         self.base_path = base_path 
         self.processor = processor 
+        self.prompted_question = prompted_question
     
     def __len__(self):
         return len(self.source)
@@ -65,13 +66,14 @@ class Dataset_(Dataset):
         question = self.question[idx]
         answer = self.answer[idx]
         img_id = self.img_id[idx]
+        prompted_question = self.prompted_question[idx]
         
         full_path = f"{self.aug_path}/{img_id}.jpg" if 'aug' in img_id else f"{self.base_path}/{img_id}.jpg" 
         img = read_image(full_path)
 
         encoding = self.processor(
             img, 
-            question, 
+            prompted_question, 
             return_tensors="pt"
         )
         

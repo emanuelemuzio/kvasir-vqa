@@ -9,8 +9,11 @@ import json
 from common.util import ROOT, logger, generate_run_id, create_generative_report, decorate_prompt
 from blip.data import Dataset_
 from dotenv import load_dotenv
-from transformers import BlipProcessor, BlipForQuestionAnswering
+from transformers import BlipProcessor, BlipForQuestionAnswering, logging
 from tqdm.auto import tqdm
+
+logging.set_verbosity_error()
+logging.set_verbosity(50)  
 
 load_dotenv()      
 RANDOM_SEED = int(os.getenv('RANDOM_SEED'))
@@ -76,18 +79,17 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
     if args.prompting is not None:
         prompting = args.prompting
-        X['question'] = X['question'].apply(lambda x : decorate_prompt(x, questions_map=questions_map, strategy=prompting))
-    
-    logger.info('Building dataloaders...')
+        X['prompted_question'] = X['question'].apply(lambda x : decorate_prompt(x, questions_map=questions_map, strategy=prompting))
     
     dataset = Dataset_(
         source=X['source'].to_numpy(), 
         question=X['question'].to_numpy(), 
+        prompted_question=X['prompted_question'].to_numpy(),
         answer=Y.to_numpy(), 
         img_id=X['img_id'].to_numpy(), 
-        base_path=kvasir_vqa_datapath,
-        processor=processor,
-    )
+        base_path=kvasir_vqa_datapath, 
+        processor=processor
+    ) 
     
     if device == 'cuda':
         torch.compile(model, 'max-autotune')

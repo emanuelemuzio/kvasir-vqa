@@ -23,6 +23,7 @@ class Dataset_(Dataset):
     def __init__(self, 
                 source=[], 
                 question=[], 
+                prompted_question=[],
                 answer=[], 
                 img_id=[],  
                 base_path='', 
@@ -35,6 +36,7 @@ class Dataset_(Dataset):
         self.img_id = img_id
         self.base_path = base_path 
         self.processor = processor
+        self.prompted_question = prompted_question
         
     def __len__(self):
         return len(self.source)
@@ -44,6 +46,7 @@ class Dataset_(Dataset):
         question = self.question[idx]
         answer = self.answer[idx]
         img_id = self.img_id[idx]
+        prompted_question = self.prompted_question[idx]
         
         full_path = f"{self.base_path}/{img_id}.jpg" 
         img = read_image(full_path)
@@ -53,7 +56,7 @@ class Dataset_(Dataset):
                 "role" : "user",
                 "content" : [
                     {"type" : "image"},
-                    {"type" : "text", "text" : question} 
+                    {"type" : "text", "text" : prompted_question} 
                 ]
             }
         ]
@@ -65,4 +68,5 @@ class Dataset_(Dataset):
             "inputs" : inputs,
             "answer" : answer,
             "question" : question
+            # "prompted_question" : prompted_question
         }

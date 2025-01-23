@@ -9,8 +9,11 @@ import json
 from common.util import ROOT, logger, generate_run_id, create_generative_report, decorate_prompt
 from git.data import Dataset_
 from dotenv import load_dotenv
-from transformers import AutoProcessor, AutoModelForCausalLM
+from transformers import AutoProcessor, AutoModelForCausalLM, logging
 from tqdm.auto import tqdm
+
+logging.set_verbosity_error()
+logging.set_verbosity(50)  
 
 load_dotenv()      
 RANDOM_SEED = int(os.getenv('RANDOM_SEED')) 
@@ -35,7 +38,7 @@ def predict(
             question = item['question']
             reference = item['answer']
 
-            generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=100)
+            generated_ids = model.generate(pixel_values=pixel_values, input_ids=input_ids, max_length=250)
             
             candidate = dataset.processor.batch_decode(generated_ids[:, input_ids.shape[1]:], skip_special_tokens=True).pop()
                 
@@ -82,16 +85,17 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     
     if args.prompting is not None:
         prompting = args.prompting
-        X['question'] = X['question'].apply(lambda x : decorate_prompt(x, questions_map=questions_map, strategy=prompting))
+        X['prompted_question'] = X['question'].apply(lambda x : decorate_prompt(x, questions_map=questions_map, strategy=prompting))
     
     dataset = Dataset_(
         source=X['source'].to_numpy(), 
         question=X['question'].to_numpy(), 
+        prompted_question=X['prompted_question'].to_numpy(),
         answer=Y.to_numpy(), 
         img_id=X['img_id'].to_numpy(), 
         base_path=kvasir_vqa_datapath, 
         processor=processor
-    )
+    ) 
     
     if device == 'cuda':
         torch.compile(model, 'max-autotune') 

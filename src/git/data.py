@@ -53,6 +53,7 @@ class Dataset_(Dataset):
     def __init__(self, 
                 source=[], 
                 question=[], 
+                prompted_question=[],
                 answer=[], 
                 img_id=[],  
                 base_path='', 
@@ -65,6 +66,7 @@ class Dataset_(Dataset):
         self.img_id = img_id
         self.base_path = base_path 
         self.processor = processor
+        self.prompted_question = prompted_question
         
     def __len__(self):
         return len(self.source)
@@ -74,18 +76,20 @@ class Dataset_(Dataset):
         question = self.question[idx]
         answer = self.answer[idx]
         img_id = self.img_id[idx]
+        prompted_question = self.prompted_question[idx]
         
         full_path = f"{self.base_path}/{img_id}.jpg" 
         img = read_image(full_path)
         
         pixel_values = self.processor(images=img, return_tensors="pt").pixel_values
 
-        input_ids = self.processor(text=question, add_special_tokens=False).input_ids
+        input_ids = self.processor(text=prompted_question, add_special_tokens=False).input_ids
         input_ids = [self.processor.tokenizer.cls_token_id] + input_ids
         input_ids = torch.tensor(input_ids).unsqueeze(0)
         
         return {
             'question' : question,
+            'prompted_question' : prompted_question,
             'answer' : answer,
             'pixel_values' : pixel_values,
             'input_ids' : input_ids

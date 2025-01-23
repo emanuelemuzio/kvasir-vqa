@@ -313,7 +313,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     processor.tokenizer.add_tokens(new_tokens)
     model.resize_token_embeddings(len(processor.tokenizer))
     
-    print(f"Added {len(new_tokens)} new tokens to tokenizer")
+    logger.info(f"Added {len(new_tokens)} new tokens to tokenizer")
     
     logger.info(f"Launching experiment with configuration: {args}")
     

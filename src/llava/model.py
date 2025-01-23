@@ -32,8 +32,9 @@ def predict(
             inputs = item['inputs'].to(model.device, torch.float16)
             question = item['question']
             true = item['answer']
+            # prompted_question = item['prompted_question']
 
-            generate_ids = model.generate(**inputs, max_new_tokens=30)
+            generate_ids = model.generate(**inputs, max_new_tokens=100)
             generated_text = dataset.processor.batch_decode(generate_ids, skip_special_tokens=True)[0]
             
             pred = generated_text.split("ASSISTANT:")[-1]
@@ -77,11 +78,12 @@ def launch_experiment(args : argparse.Namespace) -> None:
     
     if args.prompting is not None:
         prompting = args.prompting
-        X['question'] = X['question'].apply(lambda x : decorate_prompt(x, questions_map=questions_map, strategy=prompting))
+        X['prompted_question'] = X['question'].apply(lambda x : decorate_prompt(x, questions_map=questions_map, strategy=prompting))
     
     dataset = Dataset_(
         source=X['source'].to_numpy(), 
         question=X['question'].to_numpy(), 
+        prompted_question=X['prompted_question'].to_numpy(),
         answer=Y.to_numpy(), 
         img_id=X['img_id'].to_numpy(), 
         base_path=kvasir_vqa_datapath, 

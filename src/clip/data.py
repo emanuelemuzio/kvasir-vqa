@@ -56,6 +56,47 @@ class _Dataset(Dataset):
             'answer' : answer
         }
     
+class MultilabelDataset(Dataset): 
+    
+    def __init__(self, source=[], question=[], answer=[], img_id=[],  base_path='', processor=None):  
+        
+        self.source = source
+        self.question = question
+        self.answer = answer
+        self.img_id = img_id
+        self.base_path = base_path 
+        self.processor = processor
+        self.config = get_config()
+    
+    def __len__(self):
+        return len(self.source)
+
+    def __getitem__(self, idx):
+        
+        question = self.question[idx]
+        answer = self.answer[idx]
+        img_id = self.img_id[idx]
+        txt_answer = []
+        
+        full_path = f"{self.base_path}/{img_id}.jpg" 
+        img = Image.open(full_path)
+
+        encoding = self.processor(
+            text=txt_answer,
+            images=img,
+            padding="max_length",
+            return_tensors="pt"  
+        ) 
+        
+        encoding['answer'] = torch.tensor(answer)
+        encoding['question'] = torch.tensor(question)
+        
+        return {
+            'encoding': encoding,
+            'question' : question,
+            'answer' : answer
+        }
+    
 def get_config():
     labels = init_kvasir_vocab()
     ids = [i for i in range(len(labels))]

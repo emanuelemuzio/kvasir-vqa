@@ -8,7 +8,7 @@ import argparse
 import json
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from common.util import ROOT, logger, generate_run_id, plot_run, check_run_type
+from common.util import ROOT, logger, generate_run_id, plot_run, check_run_type, get_new_tokens
 from common.earlystop import EarlyStopper
 from vilt.data import Dataset_, get_config
 from dotenv import load_dotenv
@@ -127,8 +127,6 @@ def evaluate(
             break
             
     return train_loss, train_acc, val_loss, val_acc, best_weights
-
-
 
 def train(
     model,
@@ -350,6 +348,12 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
                                                  id2label=config.id2label,
                                                  label2id=config.label2id)
     model.to(device)
+    
+    new_tokens = get_new_tokens(processor.tokenizer)
+    processor.tokenizer.add_tokens(new_tokens)
+    model.resize_token_embeddings(len(processor.tokenizer))
+    
+    logger.info(f"Added {len(new_tokens)} new tokens to tokenizer")
     
     logger.info(f"Launching experiment with configuration: {args}")
     
