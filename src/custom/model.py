@@ -12,7 +12,7 @@ from sklearn.preprocessing import LabelEncoder
 from transformers import AutoTokenizer, AutoModel
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from common.util import ROOT, logger, get_run_info, generate_run_id, plot_run, check_run_type
+from common.util import ROOT, logger, get_run_info, generate_run_id, plot_run, check_run_type, get_new_tokens
 from torcheval.metrics.functional import multiclass_accuracy
 from common.earlystop import EarlyStopper
 from custom.architecture import HadamardClassifier, ConcatClassifier, ConvVQA, BiggerConvVQA
@@ -445,7 +445,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     X_train, X_test, Y_train, Y_test = train_test_split(
         X, Y, 
         test_size=0.3, 
-        # stratify=Y, 
+        stratify=Y, 
         random_state=RANDOM_SEED, 
         shuffle=True
     )
@@ -453,7 +453,7 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     X_test, X_val, Y_test, Y_val = train_test_split(
         X_test, Y_test, 
         test_size=0.5,   
-        # stratify=Y_test, 
+        stratify=Y_test, 
         random_state=RANDOM_SEED, 
         shuffle=True
     )
@@ -505,6 +505,10 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     tokenizer = get_tokenizer()
     question_encoder = get_language_model().to(device)
     feature_extractor = init(model_name=feature_extractor_name, weights_path=feature_extractor_weights_path).to(device)
+
+    new_tokens = get_new_tokens(tokenizer)
+    tokenizer.add_tokens(new_tokens)
+    question_encoder.resize_token_embeddings(len(tokenizer))
 
     logger.info('Initialized tokenizer, question encoder and feature extractor')
 

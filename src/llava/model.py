@@ -79,7 +79,9 @@ def launch_experiment(args : argparse.Namespace) -> None:
     if args.prompting is not None:
         prompting = args.prompting
         X['prompted_question'] = X['question'].apply(lambda x : decorate_prompt(x, questions_map=questions_map, strategy=prompting))
-    
+    else:
+        X['prompted_question'] = X['question']
+     
     dataset = Dataset_(
         source=X['source'].to_numpy(), 
         question=X['question'].to_numpy(), 

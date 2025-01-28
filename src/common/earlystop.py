@@ -1,4 +1,4 @@
-class EarlyStopper: 
+    class EarlyStopper: 
     
     def __init__(self, patience=1, min_delta=0, min_epochs=0):
         self.min_epochs = min_epochs

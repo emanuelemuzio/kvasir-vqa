@@ -14,8 +14,8 @@ from common.util import get_best_feature_extractor_info
 
 load_dotenv() 
 
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = 'cpu'
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = 'cpu'
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

@@ -122,6 +122,6 @@ class MultilabelDataset(Dataset):
         full_path = f"{self.aug_path}/{img_id}.jpg" if 'aug' in img_id else f"{self.base_path}/{img_id}.jpg" 
         img = read_image(full_path)         
 
-        # transformed_image = self.transform(img.float())
+        transformed_image = self.transform(img.float())
 
-        return img, question, answer
+        return transformed_image, question, answer

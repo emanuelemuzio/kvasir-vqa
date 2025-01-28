@@ -9,7 +9,7 @@ import json
 from transformers import AutoTokenizer, AutoModel
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from common.util import ROOT, logger, get_run_info, generate_run_id, plot_run, check_run_type, save_multilabel_results
+from common.util import ROOT, logger, get_run_info, generate_run_id, plot_run, check_run_type, save_multilabel_results, get_new_tokens
 from common.prompting import PromptTuning
 from common.earlystop import EarlyStopper
 from custom.architecture import HadamardClassifier, ConcatClassifier, ConvVQA, BiggerConvVQA, MultilabelVQA
@@ -30,8 +30,6 @@ RANDOM_SEED = int(os.getenv('RANDOM_SEED'))
     
 def get_classifier(feature_extractor_name=None, vocabulary_size=0, architecture=None, inference=False):
     
-    prompt_tuner = PromptTuning(os.getenv('PROMPT_TUNING_MODEL')) if inference else None
-    
     question_embedding_dim = int(os.getenv('EMBEDDING_DIM'))
     image_feature_dim = -1
     
@@ -51,16 +49,14 @@ def get_classifier(feature_extractor_name=None, vocabulary_size=0, architecture=
         vocabulary_size=vocabulary_size,
         question_embedding_dim=question_embedding_dim,
         image_feature_dim=image_feature_dim,
-        intermediate_dim=intermediate_dim,
-        prompt_tuner=prompt_tuner
+        intermediate_dim=intermediate_dim
         )
     elif architecture == 'concat':
         classifier = ConcatClassifier(
         vocabulary_size=vocabulary_size,
         question_embedding_dim=question_embedding_dim,
         image_feature_dim=image_feature_dim,
-        intermediate_dim=intermediate_dim,
-        prompt_tuner=prompt_tuner
+        intermediate_dim=intermediate_dim
         )
     elif architecture == 'conv':
         classifier = ConvVQA(
@@ -334,6 +330,8 @@ def train(
         
         output[output >= 0.5] = 1
         output[output < 0.5] = 0
+        output = torch.nan_to_num(output, nan=0.0)
+        
         output = output.cpu().detach().numpy()
         target = target.cpu().detach().numpy()
         
@@ -434,6 +432,8 @@ def val(
             
             output[output >= 0.5] = 1
             output[output < 0.5] = 0
+            output = torch.nan_to_num(output, nan=0.0)
+            
             output = output.cpu().detach().numpy()
             target = target.cpu().detach().numpy()
             
@@ -495,6 +495,7 @@ def predict(
             
             output[output >= 0.5] = 1
             output[output < 0.5] = 0
+            output = torch.nan_to_num(output, nan=0.0)
             
             predictions.append(output)
             target.append(torch.tensor(answer).float())            
@@ -591,6 +592,10 @@ def launch_experiment(args : argparse.Namespace, device: str) -> None:
     tokenizer = get_tokenizer()
     question_encoder = get_language_model().to(device)
     feature_extractor = init(model_name=feature_extractor_name, weights_path=feature_extractor_weights_path).to(device)
+
+    new_tokens = get_new_tokens(tokenizer)
+    tokenizer.add_tokens(new_tokens)
+    question_encoder.resize_token_embeddings(len(tokenizer))
 
     logger.info('Initialized tokenizer, question encoder and feature extractor')
 

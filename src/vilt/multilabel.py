@@ -18,10 +18,13 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingLR, Linea
 from sklearn.model_selection import train_test_split
 from transformers import ViltProcessor, ViltConfig, ViltForQuestionAnswering
 from sklearn.metrics import f1_score
+import numpy as np
 
 load_dotenv()      
 RANDOM_SEED = int(os.getenv('RANDOM_SEED'))
 processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-mlm")
+
+nan_fix = lambda x: x.nan_to_num(0)
 
 def collate_fn(batch):
     input_ids = [item['input_ids'] for item in batch]
@@ -156,9 +159,11 @@ def train(
         pred = torch.sigmoid(output['logits'])
         pred[pred >= 0.5] = 1
         pred[pred < 0.5] = 0
+        pred = torch.nan_to_num(pred, nan=0.0)
         
-        target = target.cpu().detach().numpy()
-        pred = pred.cpu().detach().numpy()
+        target = target.cpu().detach().tolist()
+        pred = pred.cpu().detach().tolist() 
+    
         acc = f1_score(target, pred, average='macro')
         train_acc += acc
         train_loss += loss.item()
@@ -229,9 +234,10 @@ def val(
             pred = torch.sigmoid(output['logits'])
             pred[pred >= 0.5] = 1
             pred[pred < 0.5] = 0
+            pred = torch.nan_to_num(pred, nan=0.0)
             
-            target = target.cpu().detach().numpy()
-            pred = pred.cpu().detach().numpy()
+            target = target.cpu().detach().tolist()
+            pred = pred.cpu().detach().tolist()
             acc = f1_score(target, pred, average='macro')
             val_acc += acc
             val_loss += loss.item()
@@ -287,6 +293,7 @@ def predict(
             pred = torch.sigmoid(output['logits'])
             pred[pred >= 0.5] = 1
             pred[pred < 0.5] = 0
+            pred = torch.nan_to_num(pred, nan=0.0)
             
             target = target.squeeze().cpu().detach().tolist()
             pred = pred.squeeze().cpu().detach().tolist()
